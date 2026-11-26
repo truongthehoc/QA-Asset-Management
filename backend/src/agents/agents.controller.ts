@@ -7,8 +7,10 @@ import {
   Param,
   Query,
   Headers,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { AgentsService } from './agents.service';
 import { JwtAuthGuard, PermissionsGuard, RequirePermissions, CurrentUser, AuthUser } from '../auth/guards';
@@ -133,5 +135,17 @@ export class AgentsAdminController {
   @RequirePermissions('admin.settings')
   createVersion(@Body() body: any) {
     return this.agentsService.createVersion(body);
+  }
+
+  @Post('download-installer')
+  @RequirePermissions('admin.settings')
+  async downloadInstaller(
+    @Body() body: { backendUrl?: string; enrollmentToken?: string; allowSelfSignedCert?: boolean },
+    @Res() res: Response,
+  ) {
+    const { filename, content } = await this.agentsService.buildOneClickInstaller(body || {});
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(content);
   }
 }

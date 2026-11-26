@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, Copy, Plus, Package } from 'lucide-react';
+import { KeyRound, Copy, Plus, Package, Download, MonitorCheck, AlertCircle } from 'lucide-react';
 import { api } from '../../api/client';
 import { PageHeader, Modal, Badge } from '../../components/UiPrimitives';
 import { formatDate } from '../../utils/format';
@@ -12,6 +12,19 @@ export const AgentManagementPage: React.FC = () => {
   const [verOpen, setVerOpen] = useState(false);
   const [verForm, setVerForm] = useState({ version: '', releaseNotes: '', downloadUrl: '', isLatest: true, isMandatory: false });
   const [msg, setMsg] = useState('');
+  const [errMsg, setErrMsg] = useState('');
+
+  // 1-Click Installer Download Form
+  const defaultBackendUrl =
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3001'
+      : window.location.origin;
+  const [installerForm, setInstallerForm] = useState({
+    backendUrl: defaultBackendUrl,
+    enrollmentToken: 'ENROLL-ITAM-2026-INTERNAL',
+    allowSelfSignedCert: false,
+  });
+  const [downloading, setDownloading] = useState(false);
 
   const load = async () => {
     const [tRes, vRes] = await Promise.all([api.get('/agents/tokens'), api.get('/agents/versions')]);
@@ -26,14 +39,39 @@ export const AgentManagementPage: React.FC = () => {
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');
+    setErrMsg('');
     const res = await api.post('/agents/tokens', {
       name: tokenForm.name.trim(),
       maxUses: tokenForm.maxUses ? Number(tokenForm.maxUses) : undefined,
       expiresDays: Number(tokenForm.expiresDays) || 30,
     });
     setNewRawToken(res.data.rawToken);
+    setInstallerForm((f) => ({ ...f, enrollmentToken: res.data.rawToken }));
     setTokenForm({ name: '', maxUses: '100', expiresDays: '30' });
     load();
+  };
+
+  const handleDownloadInstaller = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    setErrMsg('');
+    setDownloading(true);
+    try {
+      const res = await api.post('/agents/download-installer', installerForm, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ITAssetAgent-Setup.bat';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setMsg('Đã tải file cài đặt 1-Click (ITAssetAgent-Setup.bat). Chạy file này trên máy Windows bằng quyền Administrator để cài đặt.');
+    } catch (err: any) {
+      setErrMsg(err.response?.data?.message || 'Không thể tạo file cài đặt Agent.');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleRevokeToken = async (id: string) => {
@@ -64,6 +102,69 @@ export const AgentManagementPage: React.FC = () => {
       />
 
       {msg && <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">{msg}</div>}
+      {errMsg && (
+        <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errMsg}</span>
+        </div>
+      )}
+
+      {/* 1-Click Pre-configured Windows Agent Downloader */}
+      <div className="panel p-5 space-y-4 bg-gradient-to-br from-[#eef8fc]/70 via-white to-white border-sky-200/80">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold flex items-center gap-2 text-ink-primary">
+              <MonitorCheck className="w-4 h-4 text-brand" /> Tải bộ cài Windows Agent 1-Click (Chạy ngay — không cần .NET/Node)
+            </h2>
+            <p className="text-xs text-ink-secondary mt-0.5">
+              Sinh sẵn file <code className="font-mono text-brand">ITAssetAgent-Setup.bat</code> đã nhúng URL máy chủ &amp; Enrollment Token. Khi chạy trên Windows 10/11/Server sẽ tự cài dịch vụ chạy ngầm, biểu tượng khay hệ thống (System Tray) và đồng bộ ngay.
+            </p>
+          </div>
+          <Badge label="PowerShell Native v1.3.0" cls="bg-brand-soft text-brand border-sky-200" />
+        </div>
+
+        <form onSubmit={handleDownloadInstaller} className="grid sm:grid-cols-12 gap-3 items-end">
+          <div className="sm:col-span-5">
+            <label className="label-field">URL Máy chủ Backend <span className="text-red-500">*</span></label>
+            <input
+              required
+              value={installerForm.backendUrl}
+              onChange={(e) => setInstallerForm({ ...installerForm, backendUrl: e.target.value })}
+              className="input-field font-mono text-xs"
+              placeholder="Nhập địa chỉ URL máy chủ"
+            />
+          </div>
+          <div className="sm:col-span-4">
+            <label className="label-field">Enrollment Token <span className="text-red-500">*</span></label>
+            <input
+              required
+              value={installerForm.enrollmentToken}
+              onChange={(e) => setInstallerForm({ ...installerForm, enrollmentToken: e.target.value })}
+              className="input-field font-mono text-xs"
+              placeholder="Nhập hoặc tạo mới Enrollment Token bên dưới"
+            />
+          </div>
+          <div className="sm:col-span-3">
+            <button type="submit" disabled={downloading} className="btn-primary w-full">
+              <Download className="w-4 h-4" />
+              {downloading ? 'Đang tạo bộ cài...' : 'Tải file cài đặt (.bat)'}
+            </button>
+          </div>
+          <div className="sm:col-span-12 flex flex-wrap items-center justify-between gap-2 pt-0.5">
+            <label className="inline-flex items-center gap-2 text-xs text-ink-secondary cursor-pointer">
+              <input
+                type="checkbox"
+                checked={installerForm.allowSelfSignedCert}
+                onChange={(e) => setInstallerForm({ ...installerForm, allowSelfSignedCert: e.target.checked })}
+              />
+              <span>Cho phép chứng chỉ SSL tự ký (Self-signed CA nội bộ)</span>
+            </label>
+            <span className="text-[11px] text-ink-muted">
+              File cấu hình sau cài đặt: <code className="font-mono">C:\ProgramData\ITAssetAgent\config.json</code>
+            </span>
+          </div>
+        </form>
+      </div>
 
       {/* Enrollment Tokens */}
       <div className="panel p-5 space-y-4">

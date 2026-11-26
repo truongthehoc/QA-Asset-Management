@@ -5,6 +5,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -847,5 +849,132 @@ export class AgentsService {
         isMandatory: !!data.isMandatory,
       },
     });
+  }
+
+  private resolveWindowsAgentDir(): string {
+    const candidates = [
+      path.resolve(process.cwd(), '..', 'agent', 'windows-agent'),
+      path.resolve(process.cwd(), 'agent', 'windows-agent'),
+      path.resolve(__dirname, '..', '..', '..', '..', 'agent', 'windows-agent'),
+    ];
+    for (const dir of candidates) {
+      if (fs.existsSync(path.join(dir, 'ITAssetAgent.ps1'))) {
+        return dir;
+      }
+    }
+    throw new NotFoundException('Không tìm thấy thư mục mã nguồn agent/windows-agent trên máy chủ.');
+  }
+
+  async buildOneClickInstaller(data: {
+    backendUrl?: string;
+    enrollmentToken?: string;
+    allowSelfSignedCert?: boolean;
+  }): Promise<{ filename: string; content: Buffer }> {
+    const backendUrl = (data.backendUrl || 'http://localhost:3001').trim().replace(/\/+$/, '');
+    const enrollmentToken = (data.enrollmentToken || '').trim();
+    if (!backendUrl) {
+      throw new BadRequestException('Vui lòng nhập URL máy chủ Backend.');
+    }
+    if (!enrollmentToken) {
+      throw new BadRequestException('Vui lòng nhập Enrollment Token để nhúng vào bộ cài.');
+    }
+
+    const agentDir = this.resolveWindowsAgentDir();
+    const agentPs1 = fs.readFileSync(path.join(agentDir, 'ITAssetAgent.ps1'));
+    const trayPs1 = fs.readFileSync(path.join(agentDir, 'ITAssetAgentTray.ps1'));
+    const uninstallBat = fs.readFileSync(path.join(agentDir, 'uninstall.bat'));
+
+    const configObj = {
+      BackendBaseUrl: backendUrl,
+      EnrollmentToken: enrollmentToken,
+      AgentVersion: '1.3.0-ps',
+      AllowSelfSignedCert: Boolean(data.allowSelfSignedCert),
+      HeartbeatIntervalSec: 120,
+      SnapshotIntervalSec: 1800,
+    };
+    const configBuf = Buffer.from(JSON.stringify(configObj, null, 2), 'utf8');
+
+    const chunkB64 = (buf: Buffer) =>
+      (buf.toString('base64').match(/.{1,120}/g) || []).join('\r\n');
+
+    const bat = [
+      '@echo off',
+      'chcp 65001 >nul',
+      'setlocal',
+      '',
+      ':: Tu dong yeu cau quyen Administrator',
+      'net session >nul 2>&1',
+      'if %errorLevel% neq 0 (',
+      '    echo Dang yeu cau quyen Administrator de cai dat IT Asset Management Agent...',
+      '    powershell -NoProfile -Command "Start-Process -FilePath \'%~f0\' -Verb RunAs"',
+      '    exit /b',
+      ')',
+      '',
+      'echo ============================================================',
+      'echo   IT ASSET MANAGEMENT - CAI DAT WINDOWS AGENT (1-CLICK)',
+      `echo   May chu: ${backendUrl}`,
+      'echo ============================================================',
+      'set "ITAM_SETUP_SELF=%~f0"',
+      'powershell -NoProfile -ExecutionPolicy Bypass -Command ^',
+      '  "$self = $env:ITAM_SETUP_SELF; $raw = Get-Content -LiteralPath $self -Raw;' +
+        ' function Extract-Block($name, $dest) {' +
+        '   $m = [regex]::Match($raw, \"::BEGIN_$name\\r?\\n([\\s\\S]*?)\\r?\\n::END_$name\");' +
+        '   if (-not $m.Success) { throw \"Khong doc duoc goi $name\" };' +
+        '   $b64 = ($m.Groups[1].Value -replace \'\\s+\', \'\');' +
+        '   [IO.File]::WriteAllBytes($dest, [Convert]::FromBase64String($b64));' +
+        ' };' +
+        ' $installDir = \'C:\\Program Files\\ITAssetAgent\';' +
+        ' $dataDir = \'C:\\ProgramData\\ITAssetAgent\';' +
+        ' New-Item -ItemType Directory -Path $installDir -Force | Out-Null;' +
+        ' New-Item -ItemType Directory -Path $dataDir -Force | Out-Null;' +
+        ' Extract-Block \'AGENT_PS1\' (Join-Path $installDir \'ITAssetAgent.ps1\');' +
+        ' Extract-Block \'TRAY_PS1\' (Join-Path $installDir \'ITAssetAgentTray.ps1\');' +
+        ' Extract-Block \'UNINSTALL_BAT\' (Join-Path $installDir \'uninstall.bat\');' +
+        ' Extract-Block \'CONFIG_JSON\' (Join-Path $dataDir \'config.json\');' +
+        ' Write-Host \'[1/3] Da giai nen file Agent va cau hinh thanh cong.\';' +
+        ' $a1 = New-ScheduledTaskAction -Execute \'powershell.exe\' -Argument \'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Program Files\\ITAssetAgent\\ITAssetAgent.ps1\" -Mode Daemon -ConfigPath \"C:\\ProgramData\\ITAssetAgent\\config.json\"\';' +
+        ' $t1 = New-ScheduledTaskTrigger -AtStartup;' +
+        ' $p1 = New-ScheduledTaskPrincipal -UserId \'SYSTEM\' -LogonType ServiceAccount -RunLevel Highest;' +
+        ' $s1 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero);' +
+        ' Register-ScheduledTask -TaskName \'ITAssetManagementAgent\' -Action $a1 -Trigger $t1 -Principal $p1 -Settings $s1 -Force | Out-Null;' +
+        ' Start-ScheduledTask -TaskName \'ITAssetManagementAgent\';' +
+        ' Write-Host \'[2/3] Da dang ky va khoi dong dich vu chay ngam (SYSTEM).\';' +
+        ' $a2 = New-ScheduledTaskAction -Execute \'powershell.exe\' -Argument \'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Program Files\\ITAssetAgent\\ITAssetAgentTray.ps1\"\';' +
+        ' $t2 = New-ScheduledTaskTrigger -AtLogOn;' +
+        ' $p2 = New-ScheduledTaskPrincipal -GroupId \'BUILTIN\\Users\' -RunLevel Limited;' +
+        ' $s2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero);' +
+        ' Register-ScheduledTask -TaskName \'ITAssetManagementAgentTray\' -Action $a2 -Trigger $t2 -Principal $p2 -Settings $s2 -Force | Out-Null;' +
+        ' Start-Process powershell.exe -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Program Files\\ITAssetAgent\\ITAssetAgentTray.ps1\"\';' +
+        ' Write-Host \'[3/3] Dang dong bo cau hinh lan dau ve may chu...\';' +
+        ' & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installDir \'ITAssetAgent.ps1\') -Mode Once -ConfigPath (Join-Path $dataDir \'config.json\')"',
+      'echo.',
+      'echo ============================================================',
+      'echo   HOAN TAT CAI DAT WINDOWS AGENT!',
+      'echo   - Thu muc cai dat : C:\\Program Files\\ITAssetAgent',
+      'echo   - File cau hinh   : C:\\ProgramData\\ITAssetAgent\\config.json',
+      'echo   - Nhat ky dong bo : C:\\ProgramData\\ITAssetAgent\\logs\\agent.log',
+      'echo ============================================================',
+      'pause',
+      'exit /b 0',
+      '',
+      '::BEGIN_AGENT_PS1',
+      chunkB64(agentPs1),
+      '::END_AGENT_PS1',
+      '::BEGIN_TRAY_PS1',
+      chunkB64(trayPs1),
+      '::END_TRAY_PS1',
+      '::BEGIN_UNINSTALL_BAT',
+      chunkB64(uninstallBat),
+      '::END_UNINSTALL_BAT',
+      '::BEGIN_CONFIG_JSON',
+      chunkB64(configBuf),
+      '::END_CONFIG_JSON',
+      '',
+    ].join('\r\n');
+
+    return {
+      filename: 'ITAssetAgent-Setup.bat',
+      content: Buffer.from(bat, 'utf8'),
+    };
   }
 }
