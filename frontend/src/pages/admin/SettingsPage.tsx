@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Clock,
+  Radar,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { PageHeader, Badge } from '../../components/UiPrimitives';
@@ -38,6 +39,13 @@ const GROUP_LIST: GroupConfig[] = [
     title: 'Chu kỳ đồng bộ Windows Agent',
     desc: 'Agent tự động cập nhật lịch thu thập cấu hình thông qua API nội bộ.',
     icon: Cpu,
+  },
+  {
+    id: 'DISCOVERY',
+    shortTitle: 'Khám phá thiết bị',
+    title: 'Cấu hình khám phá thiết bị & Quét LAN',
+    desc: 'Bật hoặc tắt tính năng quét dải IP mạng LAN tùy theo mô hình triển khai (VPS/Cloud hay máy chủ nội bộ).',
+    icon: Radar,
   },
   {
     id: 'ALERT',
@@ -140,6 +148,11 @@ const FIELD_META: Record<string, FieldMeta> = {
     label: 'Từ khóa phần mềm không được phép / cần kiểm tra',
     help: 'Bất kỳ ứng dụng nào có tên chứa các từ khóa này sẽ được gắn cờ cảnh báo tự động.',
     kind: 'keywords',
+  },
+  'discovery.lan_scan_enabled': {
+    label: 'Bật tính năng quét dải IP mạng LAN (LAN Discovery)',
+    help: 'Tắt khi triển khai trên VPS/Cloud (chỉ dùng Windows Agent và nhập thủ công). Bật khi triển khai máy chủ trong mạng nội bộ công ty.',
+    kind: 'boolean',
   },
 };
 

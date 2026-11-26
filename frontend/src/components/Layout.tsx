@@ -73,9 +73,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [pwdSaving, setPwdSaving] = useState(false);
 
   useEffect(() => {
-    if (location.pathname.startsWith('/admin')) {
-      setAdminGroupOpen(true);
-    }
+    setAdminGroupOpen(location.pathname.startsWith('/admin'));
   }, [location.pathname]);
 
   useEffect(() => {
@@ -254,7 +252,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       {!collapsed && <span className="truncate font-normal">{item.label}</span>}
                     </span>
                     {!collapsed && item.badge ? (
-                      <span className="ml-2 px-1.5 py-0.5 text-[11px] font-normal rounded-full bg-amber-400 text-slate-950 tabular-nums">
+                      <span className="ml-2 min-w-[20px] h-5 px-1 inline-flex items-center justify-center text-[11px] font-medium leading-none rounded-full bg-amber-400 text-slate-950 tabular-nums shrink-0">
                         {item.badge}
                       </span>
                     ) : null}

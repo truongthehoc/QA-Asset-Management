@@ -211,12 +211,30 @@ export const DiscoveryPage: React.FC = () => {
   };
 
   const pendingDevices = devices.filter((d) => ['PENDING', 'VERIFY_CONFLICT'].includes(d.approvalStatus));
+  const lanScanEnabled = Boolean(meta?.features?.lanScanEnabled);
+
+  useEffect(() => {
+    if (!lanScanEnabled && tab === 'networks') {
+      setTab('pending');
+    }
+  }, [lanScanEnabled, tab]);
+
+  const visibleTabs = [
+    { id: 'pending', label: `Thiết bị chờ duyệt (${pendingDevices.length})` },
+    { id: 'all', label: `Tất cả thiết bị phát hiện (${devices.length})` },
+    { id: 'agents', label: `Agent đã đăng ký (${agents.length})` },
+    ...(lanScanEnabled ? [{ id: 'networks', label: `Quét mạng LAN (${networks.length})` }] : []),
+  ];
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Khám phá thiết bị & Kiểm duyệt"
-        subtitle="Thiết bị đăng ký từ Windows Agent hoặc phát hiện qua LAN Discovery phải qua bước IT kiểm duyệt trước khi trở thành tài sản chính thức."
+        subtitle={
+          lanScanEnabled
+            ? 'Thiết bị đăng ký từ Windows Agent hoặc phát hiện qua LAN Discovery phải qua bước IT kiểm duyệt trước khi trở thành tài sản chính thức.'
+            : 'Thiết bị đăng ký tự động từ Windows Agent phải qua bước IT kiểm duyệt trước khi trở thành tài sản chính thức.'
+        }
         actions={
           <button onClick={loadAll} className="btn-secondary">
             <RefreshCw className="w-4 h-4" />
@@ -239,12 +257,7 @@ export const DiscoveryPage: React.FC = () => {
 
       {/* Tabs */}
       <div className="flex items-center gap-1 border-b border-line overflow-x-auto">
-        {[
-          { id: 'pending', label: `Thiết bị chờ duyệt (${pendingDevices.length})` },
-          { id: 'all', label: `Tất cả thiết bị phát hiện (${devices.length})` },
-          { id: 'agents', label: `Agent đã đăng ký (${agents.length})` },
-          { id: 'networks', label: `Quét mạng LAN (${networks.length})` },
-        ].map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setTab(t.id as any)}

@@ -34,9 +34,22 @@ export class CatalogsService {
     }
   }
 
+  async ensureDefaultSystemSettings() {
+    await this.prisma.systemSetting.upsert({
+      where: { key: 'discovery.lan_scan_enabled' },
+      update: {},
+      create: {
+        key: 'discovery.lan_scan_enabled',
+        value: 'false',
+        group: 'DISCOVERY',
+        description: 'Bật/tắt tính năng quét dải IP mạng LAN (chỉ bật khi triển khai máy chủ trong mạng nội bộ công ty)',
+      },
+    });
+  }
+
   async getAllMeta() {
-    await this.ensureDefaultAssetStatuses();
-    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions] = await Promise.all([
+    await Promise.all([this.ensureDefaultAssetStatuses(), this.ensureDefaultSystemSettings()]);
+    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions, lanScanSetting] = await Promise.all([
       this.prisma.department.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
       this.prisma.location.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
       this.prisma.assetCategory.findMany({
@@ -55,8 +68,21 @@ export class CatalogsService {
         orderBy: { code: 'asc' },
       }),
       this.prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { code: 'asc' }] }),
+      this.prisma.systemSetting.findUnique({ where: { key: 'discovery.lan_scan_enabled' } }),
     ]);
-    return { departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions };
+    return {
+      departments,
+      locations,
+      categories,
+      assetTypes,
+      assetStatuses,
+      suppliers,
+      roles,
+      permissions,
+      features: {
+        lanScanEnabled: lanScanSetting?.value === 'true',
+      },
+    };
   }
 
   // Asset Statuses (Danh mục Trạng thái tài sản)
@@ -497,7 +523,8 @@ export class CatalogsService {
   }
 
   // System Settings
-  listSettings() {
+  async listSettings() {
+    await this.ensureDefaultSystemSettings();
     return this.prisma.systemSetting.findMany({ orderBy: [{ group: 'asc' }, { key: 'asc' }] });
   }
 

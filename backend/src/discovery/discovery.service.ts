@@ -74,6 +74,13 @@ export class DiscoveryService {
    * SRS 6: Controlled LAN Discovery (reads local ARP table / checks matching subnet + optional safe probe).
    */
   async runNetworkScan(networkId: string, actor: AuthUser, mode: 'ARP_PROBE' | 'DEMO_SIMULATE' = 'ARP_PROBE') {
+    const lanSetting = await this.prisma.systemSetting.findUnique({ where: { key: 'discovery.lan_scan_enabled' } });
+    if (lanSetting?.value !== 'true') {
+      throw new BadRequestException(
+        'Tính năng quét dải IP mạng LAN đang tắt trong Cấu hình hệ thống. Vui lòng bật tại Danh mục & quản trị → Cấu hình hệ thống khi triển khai nội bộ.',
+      );
+    }
+
     const network = await this.prisma.scanNetwork.findUnique({ where: { id: networkId } });
     if (!network) throw new NotFoundException('Không tìm thấy dải mạng.');
 
