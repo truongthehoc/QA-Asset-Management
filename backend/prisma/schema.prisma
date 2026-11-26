@@ -1,0 +1,887 @@
+// Prisma Schema - IT Asset Management System (Local Dev SQLite mode)
+// For Production MySQL 8.0 deployment, see prisma/schema.mysql.prisma (identical models/fields)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// 10.1 NHÓM DANH MỤC VÀ NGƯỜI DÙNG
+// ============================================================================
+
+model Department {
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  name                String
+  description         String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  users               User[]
+  managedAssets       Asset[]          @relation("ManagingDepartment")
+  usingAssets         Asset[]          @relation("UsingDepartment")
+  assignmentsFrom     AssetAssignment[] @relation("AssignDept")
+  transfersFrom       AssetTransfer[]   @relation("TransferFromDept")
+  transfersTo         AssetTransfer[]   @relation("TransferToDept")
+  inventorySessions   InventorySession[]
+  userRoles           UserRole[]
+}
+
+model Location {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  building    String?
+  floor       String?
+  room        String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assets      Asset[]
+}
+
+model Supplier {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  taxCode     String?
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  purchases   AssetPurchase[]
+}
+
+model AssetCategory {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  types       AssetType[]
+  assets      Asset[]
+}
+
+model AssetType {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g. PC, LT, SV, MN, PR, SW
+  name        String
+  categoryId  String
+  supportsAgent Boolean @default(false)
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category    AssetCategory @relation(fields: [categoryId], references: [id])
+  assets      Asset[]
+  userRoles   UserRole[]
+}
+
+model AssetStatusCatalog {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  name        String
+  bgColor     String   @default("#ECFDF5")
+  textColor   String   @default("#047857")
+  description String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique
+  email         String    @unique
+  fullName      String
+  passwordHash  String
+  employeeCode  String?
+  phone         String?
+  title         String?
+  departmentId  String?
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  department          Department?           @relation(fields: [departmentId], references: [id])
+  userRoles           UserRole[]
+  assignedAssets      Asset[]               @relation("AssetAssignee")
+  uploadedDocuments   AssetDocument[]
+  auditLogs           AuditLog[]
+  assetAuditLogs      AssetAuditLog[]
+  notifications       Notification[]
+  alertAcks           AlertAcknowledgement[]
+  verifiedChanges     DeviceChange[]        @relation("ChangeVerifier")
+  confirmedBaselines  DeviceBaseline[]      @relation("BaselineConfirmer")
+  createdTokens       EnrollmentToken[]
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  code        String   @unique // SYSTEM_ADMIN, IT_ADMIN, IT_STAFF, DEPARTMENT_VIEWER
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions RolePermission[]
+  userRoles   UserRole[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g. assets.read, assets.write, assets.approve, assets.edit_code, alerts.verify, admin.manage
+  module      String
+  name        String
+  description String?
+
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+}
+
+model UserRole {
+  id           String      @id @default(uuid())
+  userId       String
+  roleId       String
+  scopeType    String      @default("ORGANIZATION") // ORGANIZATION, DEPARTMENT, ASSET_TYPE
+  departmentId String?
+  assetTypeId  String?
+  createdAt    DateTime    @default(now())
+
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role         Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  department   Department? @relation(fields: [departmentId], references: [id])
+  assetType    AssetType?  @relation(fields: [assetTypeId], references: [id])
+}
+
+// ============================================================================
+// 10.2 NHÓM TÀI SẢN
+// ============================================================================
+
+model AssetCodeSequence {
+  id         String   @id @default(uuid())
+  prefixKey  String   @unique // e.g. IT-PC-2026
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt
+}
+
+model Asset {
+  id                    String    @id @default(uuid())
+  assetCode             String    @unique
+  codeMode              String    @default("AUTO") // AUTO | MANUAL
+  name                  String
+  categoryId            String
+  assetTypeId           String
+  status                String    @default("IN_USE") // IN_USE, UNALLOCATED, MAINTENANCE, BROKEN, DISPOSED, LOST
+  serialNumber          String?
+  qrCodeValue           String?
+  manufacturer          String?
+  model                 String?
+  hostname              String?
+  managingDepartmentId  String?
+  usingDepartmentId     String?
+  assignedUserId        String?
+  assignedUserName      String?
+  locationId            String?
+  locationDetail        String?
+  handoverDate          DateTime?
+  handoverBy            String?
+  receivedBy            String?
+  officialSpecsJson     String?   // JSON string of IT-confirmed baseline hardware/OS summary
+  notes                 String?
+  approvedById          String?
+  approvedAt            DateTime?
+  createdById           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  category              AssetCategory     @relation(fields: [categoryId], references: [id])
+  assetType             AssetType         @relation(fields: [assetTypeId], references: [id])
+  managingDepartment    Department?       @relation("ManagingDepartment", fields: [managingDepartmentId], references: [id])
+  usingDepartment       Department?       @relation("UsingDepartment", fields: [usingDepartmentId], references: [id])
+  assignedUser          User?             @relation("AssetAssignee", fields: [assignedUserId], references: [id])
+  location              Location?         @relation(fields: [locationId], references: [id])
+
+  purchase              AssetPurchase?
+  documents             AssetDocument[]
+  assignments           AssetAssignment[]
+  transfers             AssetTransfer[]
+  maintenances          AssetMaintenance[]
+  disposals             AssetDisposal[]
+  auditLogs             AssetAuditLog[]
+  agents                DeviceAgent[]
+  agentLinks            AssetAgentLink[]
+  baselines             DeviceBaseline[]
+  deviceChanges         DeviceChange[]
+  alerts                AlertEvent[]
+  inventoryItems        InventoryItem[]
+  discoveredDevices     DiscoveredDevice[]
+}
+
+model AssetPurchase {
+  id                String    @id @default(uuid())
+  assetId           String    @unique
+  purchaseDate      DateTime?
+  inUseDate         DateTime?
+  supplierId        String?
+  contractNumber    String?
+  invoiceNumber     String?
+  purchasePrice     Float?
+  fundingSource     String?
+  warrantyStartDate DateTime?
+  warrantyEndDate   DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  asset             Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  supplier          Supplier? @relation(fields: [supplierId], references: [id])
+}
+
+model AssetDocument {
+  id           String   @id @default(uuid())
+  assetId      String
+  docType      String   // PURCHASE_PDF, INVOICE, CONTRACT, HANDOVER, WARRANTY, PHOTO, MAINTENANCE, OTHER
+  originalName String
+  storedName   String   // UUID-based safe filename on disk
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  notes        String?
+  uploadedById String?
+  uploadedAt   DateTime @default(now())
+
+  asset        Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id])
+}
+
+model AssetAssignment {
+  id             String      @id @default(uuid())
+  assetId        String
+  assignmentCode String      @unique
+  departmentId   String?
+  assigneeName   String
+  assigneeUserId String?
+  handoverBy     String
+  receivedBy     String
+  locationDetail String?
+  handoverDate   DateTime    @default(now())
+  returnDate     DateTime?
+  status         String      @default("ACTIVE") // ACTIVE, RETURNED
+  notes          String?
+  createdAt      DateTime    @default(now())
+
+  asset          Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  department     Department? @relation("AssignDept", fields: [departmentId], references: [id])
+}
+
+model AssetTransfer {
+  id               String      @id @default(uuid())
+  transferCode     String      @unique
+  assetId          String
+  fromDepartmentId String?
+  fromUserName     String?
+  fromLocation     String?
+  toDepartmentId   String?
+  toUserName       String?
+  toLocation       String?
+  reason           String
+  handoverBy       String
+  receivedBy       String
+  transferDate     DateTime    @default(now())
+  status           String      @default("COMPLETED") // PENDING, COMPLETED, CANCELLED
+  notes            String?
+  createdById      String?
+  createdAt        DateTime    @default(now())
+
+  asset            Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fromDepartment   Department? @relation("TransferFromDept", fields: [fromDepartmentId], references: [id])
+  toDepartment     Department? @relation("TransferToDept", fields: [toDepartmentId], references: [id])
+}
+
+model AssetMaintenance {
+  id              String    @id @default(uuid())
+  ticketCode      String    @unique
+  assetId         String
+  maintenanceType String    @default("REPAIR") // REPAIR, UPGRADE, PREVENTIVE, WARRANTY_CLAIM
+  issueSummary    String
+  conditionBefore String?
+  receivedDate    DateTime  @default(now())
+  completedDate   DateTime?
+  vendorName      String?
+  workPerformed   String?
+  replacedParts   String?
+  cost            Float     @default(0)
+  performedBy     String?
+  status          String    @default("IN_PROGRESS") // OPEN, IN_PROGRESS, COMPLETED, CANCELLED
+  documentRef     String?
+  notes           String?
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  asset           Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model AssetDisposal {
+  id               String   @id @default(uuid())
+  disposalCode     String   @unique
+  assetId          String
+  disposalDate     DateTime @default(now())
+  reason           String
+  method           String   // LIQUIDATION, SCRAP, DONATION, RETURN_VENDOR
+  salvageValue     Float    @default(0)
+  approvedBy       String
+  decisionNumber   String?
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  asset            Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+}
+
+model AssetAuditLog {
+  id         String   @id @default(uuid())
+  assetId    String
+  action     String   // CREATED, APPROVED, UPDATED, CODE_CHANGED, TRANSFERRED, HANDOVER, MAINTENANCE, BASELINE_UPDATED, DISPOSED
+  fieldName  String?
+  oldValue   String?
+  newValue   String?
+  reason     String?
+  actorId    String?
+  actorName  String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  actor      User?    @relation(fields: [actorId], references: [id])
+}
+
+model AssetAgentLink {
+  id         String    @id @default(uuid())
+  assetId    String
+  agentId    String
+  linkedAt   DateTime  @default(now())
+  unlinkedAt DateTime?
+  reason     String?
+  isActive   Boolean   @default(true)
+
+  asset      Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  agent      DeviceAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model InventorySession {
+  id           String    @id @default(uuid())
+  sessionCode  String    @unique
+  name         String
+  departmentId String?
+  status       String    @default("OPEN") // DRAFT, OPEN, COMPLETED, CLOSED
+  startDate    DateTime  @default(now())
+  dueDate      DateTime?
+  completedAt  DateTime?
+  createdById  String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  department   Department?     @relation(fields: [departmentId], references: [id])
+  items        InventoryItem[]
+}
+
+model InventoryItem {
+  id               String    @id @default(uuid())
+  sessionId        String
+  assetId          String
+  status           String    @default("NOT_CHECKED") // CHECKED, NOT_CHECKED, MISSING, WRONG_LOCATION, WRONG_USER, WRONG_CONFIG, DAMAGED
+  actualLocation   String?
+  actualUser       String?
+  actualCondition  String?
+  discrepancyNotes String?
+  checkedBy        String?
+  checkedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  session          InventorySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  asset            Asset            @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, assetId])
+}
+
+// ============================================================================
+// 10.3 NHÓM AGENT VÀ THIẾT BỊ
+// ============================================================================
+
+model EnrollmentToken {
+  id          String    @id @default(uuid())
+  name        String
+  tokenHash   String    @unique
+  tokenPreview String
+  maxUses     Int?
+  usedCount   Int       @default(0)
+  expiresAt   DateTime
+  isRevoked   Boolean   @default(false)
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+}
+
+model AgentVersion {
+  id           String   @id @default(uuid())
+  version      String   @unique // e.g. 1.2.0
+  releaseNotes String?
+  downloadUrl  String?
+  sha256Hash   String?
+  isLatest     Boolean  @default(false)
+  isMandatory  Boolean  @default(false)
+  releasedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+}
+
+model DeviceAgent {
+  id                String    @id @default(uuid())
+  agentUid          String    @unique // Unique Agent ID generated on endpoint
+  credentialHash    String    // Per-agent hashed token (never shared)
+  status            String    @default("ONLINE") // ONLINE, OFFLINE, REVOKED, CONFLICT
+  agentVersion      String    @default("1.0.0")
+  hostname          String
+  computerName      String?
+  smbiosUuid        String?
+  biosSerial        String?
+  primaryMac        String?
+  lastIpAddress     String?
+  manufacturer      String?
+  model             String?
+  osSummary         String?
+  enrolledAt        DateTime  @default(now())
+  lastHeartbeatAt   DateTime?
+  lastSnapshotAt    DateTime?
+  revokedAt         DateTime?
+  revokeReason      String?
+  assetId           String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  asset             Asset?             @relation(fields: [assetId], references: [id])
+  assetLinks        AssetAgentLink[]
+  discoveredDevices DiscoveredDevice[]
+  snapshots         DeviceSnapshot[]
+  baselines         DeviceBaseline[]
+  changes           DeviceChange[]
+  heartbeats        DeviceHeartbeat[]
+  commands          AgentCommand[]
+  alerts            AlertEvent[]
+}
+
+model DiscoveredDevice {
+  id               String    @id @default(uuid())
+  source           String    // AGENT | LAN_DISCOVERY | BOTH
+  approvalStatus   String    @default("PENDING") // PENDING, APPROVED, IGNORED, VERIFY_CONFLICT
+  agentId          String?
+  assetId          String?
+  hostname         String?
+  ipAddress        String?
+  macAddress       String?
+  macVendor        String?
+  smbiosUuid       String?
+  serialNumber     String?
+  manufacturer     String?
+  model            String?
+  osName           String?
+  cpuSummary       String?
+  ramTotalGb       Float?
+  diskSummary      String?
+  openPorts        String?
+  conflictReason   String?
+  ignoreReason     String?
+  firstSeenAt      DateTime  @default(now())
+  lastSeenAt       DateTime  @default(now())
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  agent            DeviceAgent? @relation(fields: [agentId], references: [id])
+  asset            Asset?       @relation(fields: [assetId], references: [id])
+}
+
+model DeviceSnapshot {
+  id               String    @id @default(uuid())
+  agentId          String
+  idempotencyKey   String?   @unique
+  source           String    @default("PERIODIC") // INITIAL, PERIODIC, EVENT_TRIGGERED, MANUAL
+  collectedAt      DateTime  @default(now())
+  computerName     String?
+  hostname         String?
+  smbiosUuid       String?
+  serialNumber     String?
+  manufacturer     String?
+  model            String?
+  mainboardMfg     String?
+  mainboardProduct String?
+  mainboardSerial  String?
+  biosMfg          String?
+  biosVersion      String?
+  biosReleaseDate  String?
+  biosSerial       String?
+  totalRamGb       Float?
+  totalDiskGb      Float?
+  rawPayloadJson   String?
+  createdAt        DateTime  @default(now())
+
+  agent            DeviceAgent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  processors       DeviceProcessor[]
+  memoryModules    DeviceMemoryModule[]
+  disks            DeviceDisk[]
+  networkAdapters  DeviceNetworkAdapter[]
+  graphics         DeviceGraphic[]
+  monitors         DeviceMonitor[]
+  operatingSystem  DeviceOperatingSystem?
+  software         DeviceSoftware[]
+  baselines        DeviceBaseline[]
+  changes          DeviceChange[]
+}
+
+model DeviceProcessor {
+  id                String         @id @default(uuid())
+  snapshotId        String
+  name              String
+  manufacturer      String?
+  cores             Int?
+  logicalProcessors Int?
+  maxClockMhz       Int?
+
+  snapshot          DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceMemoryModule {
+  id           String         @id @default(uuid())
+  snapshotId   String
+  slot         String?
+  capacityGb   Float
+  memoryType   String?        // DDR4, DDR5
+  speedMhz     Int?
+  manufacturer String?
+  serialNumber String?
+
+  snapshot     DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceDisk {
+  id           String         @id @default(uuid())
+  snapshotId   String
+  model        String
+  serialNumber String?
+  mediaType    String?        // NVMe SSD, SATA SSD, HDD
+  sizeGb       Float
+  freeGb       Float?
+  partitions   String?
+
+  snapshot     DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceNetworkAdapter {
+  id          String         @id @default(uuid())
+  snapshotId  String
+  name        String
+  macAddress  String?
+  ipAddress   String?
+  speedMbps   Int?
+  status      String?        // UP, DOWN
+  isVirtual   Boolean        @default(false)
+
+  snapshot    DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceGraphic {
+  id           String         @id @default(uuid())
+  snapshotId   String
+  name         String
+  vramMb       Int?
+  driverVersion String?
+
+  snapshot     DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceMonitor {
+  id           String         @id @default(uuid())
+  snapshotId   String
+  manufacturer String?
+  model        String?
+  serialNumber String?
+  resolution   String?
+
+  snapshot     DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceOperatingSystem {
+  id                 String         @id @default(uuid())
+  snapshotId         String         @unique
+  productName        String
+  edition            String?
+  version            String?
+  buildNumber        String?
+  architecture       String?
+  installDate        DateTime?
+  lastBootTime       DateTime?
+  activationStatus   String         // ACTIVATED, NOT_ACTIVATED, NOTIFICATION, UNKNOWN
+  licenseDescription String?
+  licenseChannel     String?        // OEM, Retail, Volume:MAK, Volume:KMS
+  partialProductKey  String?        // Max 5 chars ONLY - NEVER store full product key!
+  checkedAt          DateTime       @default(now())
+
+  snapshot           DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceSoftware {
+  id              String         @id @default(uuid())
+  snapshotId      String
+  displayName     String
+  publisher       String?
+  displayVersion  String?
+  installDate     String?
+  installLocation String?
+  architecture    String?        // x64, x86
+  uninstallEntry  String?
+  isUnauthorized  Boolean        @default(false)
+  detectedAt      DateTime       @default(now())
+
+  snapshot        DeviceSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+}
+
+model DeviceBaseline {
+  id            String         @id @default(uuid())
+  assetId       String
+  agentId       String
+  snapshotId    String
+  version       Int            @default(1)
+  isActive      Boolean        @default(true)
+  baselineJson  String         // Structured canonical baseline snapshot for diffing
+  confirmedById String?
+  confirmedAt   DateTime       @default(now())
+  notes         String?
+
+  asset         Asset          @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  agent         DeviceAgent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  snapshot      DeviceSnapshot @relation(fields: [snapshotId], references: [id])
+  confirmedBy   User?          @relation("BaselineConfirmer", fields: [confirmedById], references: [id])
+  changes       DeviceChange[]
+}
+
+model DeviceChange {
+  id             String          @id @default(uuid())
+  assetId        String?
+  agentId        String
+  baselineId     String?
+  snapshotId     String
+  component      String          // CPU, RAM, DISK, MAINBOARD, GPU, NETWORK, MONITOR, BIOS, WINDOWS, SOFTWARE
+  changeType     String          // MODIFIED, ADDED, REMOVED
+  previousValue  String
+  newValue       String
+  severity       String          @default("MEDIUM") // INFO, MEDIUM, HIGH, CRITICAL
+  status         String          @default("PENDING") // PENDING, APPROVED, REJECTED, IGNORED
+  source         String          @default("BASELINE_DIFF")
+  detectedAt     DateTime        @default(now())
+  verifiedById   String?
+  verifiedAt     DateTime?
+  verifyNotes    String?
+
+  asset          Asset?          @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  agent          DeviceAgent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  baseline       DeviceBaseline? @relation(fields: [baselineId], references: [id])
+  snapshot       DeviceSnapshot  @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  verifiedBy     User?           @relation("ChangeVerifier", fields: [verifiedById], references: [id])
+  alerts         AlertEvent[]
+}
+
+model DeviceHeartbeat {
+  id             String      @id @default(uuid())
+  agentId        String
+  ipAddress      String?
+  agentVersion   String?
+  cpuLoadPercent Float?
+  ramUsedPercent Float?
+  uptimeSeconds  Int?
+  receivedAt     DateTime    @default(now())
+
+  agent          DeviceAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+// ============================================================================
+// 10.4 NHÓM QUÉT MẠNG, CẢNH BÁO VÀ QUẢN TRỊ
+// ============================================================================
+
+model ScanNetwork {
+  id          String         @id @default(uuid())
+  name        String
+  cidr        String         @unique // e.g. 192.168.10.0/24
+  vlan        String?
+  description String?
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  schedules   ScanSchedule[]
+  scans       DeviceScan[]
+}
+
+model ScanSchedule {
+  id            String      @id @default(uuid())
+  networkId     String
+  name          String
+  cronExpr      String      // e.g. "0 2 * * *"
+  isEnabled     Boolean     @default(true)
+  lastRunAt     DateTime?
+  nextRunAt     DateTime?
+  createdAt     DateTime    @default(now())
+
+  network       ScanNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+}
+
+model DeviceScan {
+  id              String      @id @default(uuid())
+  networkId       String
+  triggerType     String      @default("MANUAL") // MANUAL | SCHEDULED
+  triggeredBy     String?
+  status          String      @default("COMPLETED") // RUNNING, COMPLETED, FAILED
+  hostsScanned    Int         @default(0)
+  hostsAlive      Int         @default(0)
+  newDevicesFound Int         @default(0)
+  summaryJson     String?
+  startedAt       DateTime    @default(now())
+  completedAt     DateTime?
+
+  network         ScanNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+}
+
+model AlertRule {
+  id          String   @id @default(uuid())
+  code        String   @unique // e.g. HARDWARE_CPU_CHANGE, HARDWARE_RAM_CHANGE, SOFTWARE_CHANGE, AGENT_OFFLINE, WARRANTY_EXPIRING
+  name        String
+  category    String   // CONFIG_CHANGE, AGENT_OFFLINE, WARRANTY, SOFTWARE, DISCOVERY, INVENTORY, SECURITY
+  severity    String   // INFO, MEDIUM, HIGH, CRITICAL
+  isEnabled   Boolean  @default(true)
+  threshold   String?  // e.g. "30" days or "15" minutes
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model AlertEvent {
+  id               String                 @id @default(uuid())
+  ruleCode         String?
+  category         String                 // CONFIG_CHANGE, AGENT_OFFLINE, WARRANTY, SOFTWARE, DISCOVERY, INVENTORY, SECURITY
+  severity         String                 // INFO, MEDIUM, HIGH, CRITICAL
+  status           String                 @default("NEW") // NEW, ACKNOWLEDGED, IN_PROGRESS, CONFIRMED, CLOSED, IGNORED
+  title            String
+  message          String
+  assetId          String?
+  agentId          String?
+  deviceChangeId   String?
+  component        String?
+  previousValue    String?
+  newValue         String?
+  source           String                 @default("SYSTEM")
+  detectedAt       DateTime               @default(now())
+  resolvedAt       DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  asset            Asset?                 @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  agent            DeviceAgent?           @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  deviceChange     DeviceChange?          @relation(fields: [deviceChangeId], references: [id], onDelete: SetNull)
+  acknowledgements AlertAcknowledgement[]
+}
+
+model AlertAcknowledgement {
+  id          String     @id @default(uuid())
+  alertId     String
+  userId      String?
+  actorName   String
+  fromStatus  String
+  toStatus    String
+  notes       String?
+  createdAt   DateTime   @default(now())
+
+  alert       AlertEvent @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  user        User?      @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String?
+  title     String
+  body      String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AgentCommand {
+  id          String      @id @default(uuid())
+  agentId     String
+  commandType String      // STRICT ALLOWLIST ONLY: SYNC_INVENTORY, SYNC_SOFTWARE, RELOAD_CONFIG, CHECK_UPDATE
+  status      String      @default("PENDING") // PENDING, SENT, COMPLETED, EXPIRED
+  issuedBy    String?
+  issuedAt    DateTime    @default(now())
+  completedAt DateTime?
+
+  agent       DeviceAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  group       String   @default("GENERAL") // ASSET_CODE, AGENT_SCHEDULE, ALERT, SECURITY, GENERAL
+  description String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  actorName  String
+  action     String
+  entityType String
+  entityId   String?
+  oldValue   String?
+  newValue   String?
+  reason     String?
+  ipAddress  String?
+  requestId  String?
+  createdAt  DateTime @default(now())
+
+  user       User?    @relation(fields: [userId], references: [id])
+}

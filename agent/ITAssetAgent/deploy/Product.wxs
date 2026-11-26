@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- WiX v4 MSI Installer template for GPO Mass Deployment (SRS 4.1) -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="IT Asset Management Windows Agent"
+           Manufacturer="Internal IT Department"
+           Version="1.2.0.0"
+           UpgradeCode="B7D2C64E-4F81-4A1E-9C30-8A2C5D11E901">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of IT Asset Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="ITAssetAgent">
+        <Component Id="AgentExecutable" Guid="38C912AA-7741-4A21-8891-A10293847561">
+          <File Id="AgentExe" Source="$(var.PublishDir)\ITAssetAgent.exe" KeyPath="yes" />
+          <ServiceInstall Id="ServiceInstaller"
+                          Type="ownProcess"
+                          Name="ITAssetManagementAgent"
+                          DisplayName="IT Asset Management Windows Agent"
+                          Description="Thu thap cau hinh tai san CNTT noi bo"
+                          Start="auto"
+                          Account="LocalSystem"
+                          ErrorControl="normal" />
+          <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="ITAssetManagementAgent" Wait="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Package>
+</Wix>

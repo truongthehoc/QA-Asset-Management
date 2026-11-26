@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: itam-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: itam_root_password_2026
+      MYSQL_DATABASE: it_asset_management
+      MYSQL_USER: itam_user
+      MYSQL_PASSWORD: itam_password_2026
+    ports:
+      - '3306:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: node:22-alpine
+    container_name: itam-backend
+    working_dir: /app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: mysql://itam_user:itam_password_2026@mysql:3306/it_asset_management
+      PORT: 3001
+      JWT_SECRET: change-this-production-secret-key
+      CORS_ORIGIN: http://localhost:5173
+    volumes:
+      - ./backend:/app
+      - uploaded_files:/app/storage/uploads
+    ports:
+      - '3001:3001'
+    command: sh -c "npx prisma generate --schema=prisma/schema.mysql.prisma && npx prisma db push --schema=prisma/schema.mysql.prisma && npm run db:seed && npm run build && npm run start:prod"
+
+  frontend:
+    image: node:22-alpine
+    container_name: itam-frontend
+    working_dir: /app
+    restart: unless-stopped
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - '5173:5173'
+    command: sh -c "npm run dev -- --host 0.0.0.0"
+
+volumes:
+  mysql_data:
+  uploaded_files:
