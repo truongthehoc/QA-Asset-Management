@@ -113,15 +113,53 @@ export class DashboardService {
       take: 8,
     });
 
-    // Build 6-month movement trend
-    const movement = [
-      { month: '06/2026', added: 2, transfers: 1, repairs: 0 },
-      { month: '07/2026', added: 1, transfers: 0, repairs: 1 },
-      { month: '08/2026', added: 1, transfers: 2, repairs: 0 },
-      { month: '09/2026', added: 2, transfers: 1, repairs: 0 },
-      { month: '10/2026', added: 3, transfers: 1, repairs: 1 },
-      { month: '11/2026', added: 2, transfers: 2, repairs: 1 },
-    ];
+    // Build real 6-month movement trend from database (no hardcoded mock data)
+    const monthBuckets: Array<{ key: string; month: string; added: number; transfers: number; repairs: number }> = [];
+    const monthIndex = new Map<string, number>();
+    const startOf6Months = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const yyyy = d.getFullYear();
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const key = `${yyyy}-${mm}`;
+      monthIndex.set(key, monthBuckets.length);
+      monthBuckets.push({ key, month: `${mm}/${yyyy}`, added: 0, transfers: 0, repairs: 0 });
+    }
+
+    const toMonthKey = (dt: Date) =>
+      `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+
+    for (const a of assets) {
+      const idx = monthIndex.get(toMonthKey(new Date(a.createdAt)));
+      if (idx !== undefined) monthBuckets[idx].added += 1;
+    }
+
+    const [recentTransfers, recentMaintenances] = await Promise.all([
+      this.prisma.assetTransfer.findMany({
+        where: { transferDate: { gte: startOf6Months } },
+        select: { transferDate: true },
+      }),
+      this.prisma.assetMaintenance.findMany({
+        where: { receivedDate: { gte: startOf6Months } },
+        select: { receivedDate: true },
+      }),
+    ]);
+
+    for (const tr of recentTransfers) {
+      const idx = monthIndex.get(toMonthKey(new Date(tr.transferDate)));
+      if (idx !== undefined) monthBuckets[idx].transfers += 1;
+    }
+    for (const m of recentMaintenances) {
+      const idx = monthIndex.get(toMonthKey(new Date(m.receivedDate)));
+      if (idx !== undefined) monthBuckets[idx].repairs += 1;
+    }
+
+    const movement = monthBuckets.map(({ month, added, transfers, repairs }) => ({
+      month,
+      added,
+      transfers,
+      repairs,
+    }));
 
     return {
       kpis: {

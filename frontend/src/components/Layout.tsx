@@ -55,9 +55,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('itam_sidebar_collapsed') === 'true';
   });
-  const [adminGroupOpen, setAdminGroupOpen] = useState<boolean>(() =>
-    location.pathname.startsWith('/admin'),
-  );
+  const [openAdminGroup, setOpenAdminGroup] = useState<string | null>(null);
   const [quickSearch, setQuickSearch] = useState('');
   const [badges, setBadges] = useState({ pendingApproval: 0, unresolvedAlerts: 0 });
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; desc: string; to: string; kind: 'discovery' | 'alert' }>>([]);
@@ -85,10 +83,6 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [pwdStatus, setPwdStatus] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [pwdSaving, setPwdSaving] = useState(false);
-
-  useEffect(() => {
-    setAdminGroupOpen(location.pathname.startsWith('/admin'));
-  }, [location.pathname]);
 
   useEffect(() => {
     let active = true;
@@ -211,36 +205,80 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     });
   };
 
-  // Main operational navigation (SRS Section 14.1 - 14.9)
-  const navItems = [
-    { to: '/', label: 'Tổng quan', icon: LayoutDashboard, show: true },
-    { to: '/discovery', label: 'Khám phá thiết bị', icon: Radar, badge: badges.pendingApproval, show: can('discovery.read') },
-    { to: '/assets', label: 'Quản lý tài sản', icon: HardDrive, show: can('assets.read') },
-    { to: '/transfers', label: 'Bàn giao & điều chuyển', icon: ArrowLeftRight, show: can('assets.read') },
-    { to: '/maintenance', label: 'Bảo trì & sửa chữa', icon: Wrench, show: can('assets.read') },
-    { to: '/inventory', label: 'Kiểm kê tài sản', icon: ClipboardCheck, show: can('assets.read') },
-    { to: '/software', label: 'Phần mềm & License', icon: Package, show: can('software.read') },
-    { to: '/alerts', label: 'Cảnh báo & Thay đổi', icon: Bell, badge: badges.unresolvedAlerts, show: can('alerts.read') },
-    { to: '/reports', label: 'Báo cáo', icon: BarChart3, show: can('reports.read') },
-  ].filter((item) => item.show);
+  // Standalone top item
+  const topNavItems = [{ to: '/', label: 'Tổng quan', icon: LayoutDashboard, show: true }];
 
-  // Separate dedicated routes for Danh mục & Quản trị — ordered by setup workflow:
-  // 1) Tổ chức & Nhân sự -> 2) Danh mục Tài sản & Mua sắm -> 3) Cấu hình, Agent & Nhật ký
-  const adminSubItems = [
-    { to: '/admin/departments', label: 'Phòng ban', icon: Building2, show: can('admin.catalogs') },
-    { to: '/admin/locations', label: 'Vị trí', icon: MapPin, show: can('admin.catalogs') },
-    { to: '/admin/roles', label: 'Phân quyền', icon: Shield, show: can('admin.users') || can('admin.settings') },
-    { to: '/admin/users', label: 'Người dùng', icon: Users, show: can('admin.users') },
-    { to: '/admin/asset-categories', label: 'Nhóm tài sản', icon: Layers, show: can('admin.catalogs') },
-    { to: '/admin/asset-types', label: 'Loại tài sản', icon: Tags, show: can('admin.catalogs') },
-    { to: '/admin/asset-statuses', label: 'Trạng thái tài sản', icon: CircleDot, show: can('admin.catalogs') },
-    { to: '/admin/suppliers', label: 'Nhà cung cấp', icon: Truck, show: can('admin.catalogs') },
-    { to: '/admin/settings', label: 'Cấu hình hệ thống', icon: Sliders, show: can('admin.settings') },
-    { to: '/admin/agent-management', label: 'Quản lý phiên bản Agent', icon: Cpu, show: can('admin.settings') },
-    { to: '/admin/audit-logs', label: 'Nhật ký hệ thống', icon: FileClock, show: can('admin.audit') },
-  ].filter((item) => item.show);
+  // 4 dedicated workflow groups (accordion auto-collapse)
+  const assetGroup = {
+    id: 'assets',
+    label: 'Quản lý tài sản',
+    icon: HardDrive,
+    groupBadge: badges.unresolvedAlerts || 0,
+    items: [
+      { to: '/assets', label: 'Danh sách tài sản', icon: HardDrive, badge: 0, show: can('assets.read') },
+      { to: '/transfers', label: 'Bàn giao & điều chuyển', icon: ArrowLeftRight, badge: 0, show: can('assets.read') },
+      { to: '/maintenance', label: 'Bảo trì & sửa chữa', icon: Wrench, badge: 0, show: can('assets.read') },
+      { to: '/inventory', label: 'Kiểm kê tài sản', icon: ClipboardCheck, badge: 0, show: can('assets.read') },
+      { to: '/software', label: 'Phần mềm & License', icon: Package, badge: 0, show: can('software.read') },
+      { to: '/alerts', label: 'Cảnh báo & Thay đổi', icon: Bell, badge: badges.unresolvedAlerts, show: can('alerts.read') },
+      { to: '/reports', label: 'Báo cáo', icon: BarChart3, badge: 0, show: can('reports.read') },
+    ].filter((item) => item.show),
+  };
 
-  const isAdminActive = location.pathname.startsWith('/admin');
+  const discoveryNavItem = {
+    to: '/discovery',
+    label: 'Khám phá thiết bị',
+    icon: Radar,
+    badge: badges.pendingApproval,
+    show: can('discovery.read'),
+  };
+
+  const adminNavGroups = [
+    {
+      id: 'catalogs',
+      label: 'Danh mục tài sản',
+      icon: Layers,
+      groupBadge: 0,
+      items: [
+        { to: '/admin/asset-categories', label: 'Nhóm tài sản', icon: Layers, badge: 0, show: can('admin.catalogs') },
+        { to: '/admin/asset-types', label: 'Loại tài sản', icon: Tags, badge: 0, show: can('admin.catalogs') },
+        { to: '/admin/asset-statuses', label: 'Trạng thái tài sản', icon: CircleDot, badge: 0, show: can('admin.catalogs') },
+        { to: '/admin/suppliers', label: 'Nhà cung cấp', icon: Truck, badge: 0, show: can('admin.catalogs') },
+      ].filter((item) => item.show),
+    },
+    {
+      id: 'org',
+      label: 'Tổ chức & Nhân sự',
+      icon: Building2,
+      groupBadge: 0,
+      items: [
+        { to: '/admin/departments', label: 'Phòng ban', icon: Building2, badge: 0, show: can('admin.catalogs') },
+        { to: '/admin/locations', label: 'Vị trí', icon: MapPin, badge: 0, show: can('admin.catalogs') },
+        { to: '/admin/roles', label: 'Phân quyền', icon: Shield, badge: 0, show: can('admin.users') || can('admin.settings') },
+        { to: '/admin/users', label: 'Người dùng', icon: Users, badge: 0, show: can('admin.users') },
+      ].filter((item) => item.show),
+    },
+    {
+      id: 'system',
+      label: 'Cấu hình & Hệ thống',
+      icon: Settings,
+      groupBadge: 0,
+      items: [
+        { to: '/admin/settings', label: 'Cấu hình hệ thống', icon: Sliders, badge: 0, show: can('admin.settings') },
+        { to: '/admin/agent-management', label: 'Quản lý phiên bản Agent', icon: Cpu, badge: 0, show: can('admin.settings') },
+        { to: '/admin/audit-logs', label: 'Nhật ký hệ thống', icon: FileClock, badge: 0, show: can('admin.audit') },
+      ].filter((item) => item.show),
+    },
+  ].filter((g) => g.items.length > 0);
+
+  const navGroups = [...(assetGroup.items.length > 0 ? [assetGroup] : []), ...adminNavGroups];
+
+  useEffect(() => {
+    const matched = navGroups.find((g) =>
+      g.items.some((sub) => location.pathname === sub.to || location.pathname.startsWith(`${sub.to}/`)),
+    );
+    setOpenAdminGroup(matched ? matched.id : null);
+  }, [location.pathname]);
 
   const handleQuickSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -322,7 +360,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
         {/* Navigation Links - White regular non-bold text */}
         <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
+          {topNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -350,83 +388,143 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       <Icon className="w-[18px] h-[18px] shrink-0 text-white" />
                       {!collapsed && <span className="truncate font-normal">{item.label}</span>}
                     </span>
-                    {!collapsed && item.badge ? (
-                      <span className="ml-2 min-w-[20px] h-5 px-1 inline-flex items-center justify-center text-[11px] font-medium leading-none rounded-full bg-amber-400 text-slate-950 tabular-nums shrink-0">
-                        {item.badge}
-                      </span>
-                    ) : null}
-                    {collapsed && item.badge ? (
-                      <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
-                    ) : null}
                   </>
                 )}
               </NavLink>
             );
           })}
 
-          {/* Expandable Group: Danh mục & Quản trị */}
-          {adminSubItems.length > 0 && (
+          {/* Standalone Khám phá thiết bị right below Tổng quan */}
+          {discoveryNavItem.show && (
             <div className="pt-2 mt-2 border-t border-white/15">
-              <button
-                type="button"
-                title={collapsed ? 'Danh mục & quản trị' : undefined}
-                onClick={() => {
-                  if (collapsed) {
-                    setCollapsed(false);
-                    localStorage.setItem('itam_sidebar_collapsed', 'false');
-                    setAdminGroupOpen(true);
-                  } else {
-                    setAdminGroupOpen((o) => !o);
-                  }
-                }}
-                className={`relative w-full flex items-center rounded-md text-sm font-normal text-white transition-colors ${
-                  collapsed ? 'justify-center px-2 py-2.5' : 'justify-between px-3 py-2'
-                } ${isAdminActive ? 'bg-white/15 text-white' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
+              <NavLink
+                to={discoveryNavItem.to}
+                title={collapsed ? discoveryNavItem.label : undefined}
+                onClick={() => setMobileOpen(false)}
+                className={({ isActive }) =>
+                  `relative flex items-center rounded-md text-sm font-normal text-white transition-colors ${
+                    collapsed ? 'justify-center px-2 py-2.5' : 'justify-between px-3 py-2'
+                  } ${
+                    isActive
+                      ? 'bg-white/20 text-white'
+                      : 'text-white/90 hover:bg-white/10 hover:text-white'
+                  }`
+                }
               >
-                <span className={`flex items-center min-w-0 ${collapsed ? '' : 'gap-2.5'}`}>
-                  <Settings className="w-[18px] h-[18px] shrink-0 text-white" />
-                  {!collapsed && <span className="truncate font-normal">Danh mục & quản trị</span>}
-                </span>
-                {!collapsed && (
-                  <ChevronDown
-                    className={`w-4 h-4 shrink-0 text-white/80 transition-transform ${
-                      adminGroupOpen ? 'rotate-180' : ''
-                    }`}
-                  />
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-white" />
+                    )}
+                    <span className={`flex items-center min-w-0 ${collapsed ? '' : 'gap-2.5'}`}>
+                      <Radar className="w-[18px] h-[18px] shrink-0 text-white" />
+                      {!collapsed && <span className="truncate font-normal">{discoveryNavItem.label}</span>}
+                    </span>
+                    {!collapsed && discoveryNavItem.badge ? (
+                      <span className="ml-2 min-w-[20px] h-5 px-1 inline-flex items-center justify-center text-[11px] font-medium leading-none rounded-full bg-amber-400 text-slate-950 tabular-nums shrink-0">
+                        {discoveryNavItem.badge}
+                      </span>
+                    ) : null}
+                    {collapsed && discoveryNavItem.badge ? (
+                      <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
+                    ) : null}
+                  </>
                 )}
-              </button>
+              </NavLink>
+            </div>
+          )}
 
-              {!collapsed && adminGroupOpen && (
-                <div className="mt-1 ml-3 pl-2.5 border-l border-white/20 space-y-0.5">
-                  {adminSubItems.map((sub) => {
-                    const SubIcon = sub.icon;
-                    return (
-                      <NavLink
-                        key={sub.to}
-                        to={sub.to}
-                        onClick={() => setMobileOpen(false)}
-                        className={({ isActive }) =>
-                          `relative flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors ${
-                            isActive
-                              ? 'bg-white/20 text-white'
-                              : 'text-white/85 hover:bg-white/10 hover:text-white'
-                          }`
+          {/* Dedicated Expandable Groups: Quản lý tài sản | Danh mục tài sản | Tổ chức & Nhân sự | Cấu hình & Hệ thống */}
+          {navGroups.length > 0 && (
+            <div className="space-y-0">
+              {navGroups.map((grp) => {
+                const GroupIcon = grp.icon;
+                const isGroupOpen = openAdminGroup === grp.id;
+                const isGroupActive = grp.items.some(
+                  (sub) => location.pathname === sub.to || location.pathname.startsWith(`${sub.to}/`),
+                );
+                return (
+                  <div key={grp.id} className="pt-2 mt-2 border-t border-white/15">
+                    <button
+                      type="button"
+                      title={collapsed ? grp.label : undefined}
+                      onClick={() => {
+                        if (collapsed) {
+                          setCollapsed(false);
+                          localStorage.setItem('itam_sidebar_collapsed', 'false');
+                          setOpenAdminGroup(grp.id);
+                        } else {
+                          setOpenAdminGroup((prev) => (prev === grp.id ? null : grp.id));
                         }
-                      >
-                        {({ isActive }) => (
-                          <>
-                            {isActive && (
-                              <span className="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-r bg-white" />
-                            )}
-                            <SubIcon className="w-4 h-4 shrink-0 text-white/90" />
-                            <span className="truncate font-normal">{sub.label}</span>
-                          </>
-                        )}
-                      </NavLink>
-                    );
-                  })}
-                </div>
-              )}
+                      }}
+                      className={`relative w-full flex items-center rounded-md text-sm font-normal text-white transition-colors ${
+                        collapsed ? 'justify-center px-2 py-2.5' : 'justify-between px-3 py-2'
+                      } ${isGroupActive ? 'bg-white/15 text-white' : 'text-white/90 hover:bg-white/10 hover:text-white'}`}
+                    >
+                      <span className={`flex items-center min-w-0 ${collapsed ? '' : 'gap-2.5'}`}>
+                        <GroupIcon className="w-[18px] h-[18px] shrink-0 text-white" />
+                        {!collapsed && <span className="truncate font-normal">{grp.label}</span>}
+                      </span>
+                      {!collapsed && (
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          {!isGroupOpen && grp.groupBadge > 0 && (
+                            <span className="min-w-[20px] h-5 px-1 inline-flex items-center justify-center text-[11px] font-medium leading-none rounded-full bg-amber-400 text-slate-950 tabular-nums">
+                              {grp.groupBadge}
+                            </span>
+                          )}
+                          <ChevronDown
+                            className={`w-4 h-4 shrink-0 text-white/80 transition-transform ${
+                              isGroupOpen ? 'rotate-180' : ''
+                            }`}
+                          />
+                        </span>
+                      )}
+                      {collapsed && grp.groupBadge > 0 && (
+                        <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400" />
+                      )}
+                    </button>
+
+                    {!collapsed && isGroupOpen && (
+                      <div className="mt-1 ml-3 pl-2.5 border-l border-white/20 space-y-0.5">
+                        {grp.items.map((sub) => {
+                          const SubIcon = sub.icon;
+                          return (
+                            <NavLink
+                              key={sub.to}
+                              to={sub.to}
+                              onClick={() => setMobileOpen(false)}
+                              className={({ isActive }) =>
+                                `relative flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md text-[13px] font-normal transition-colors ${
+                                  isActive
+                                    ? 'bg-white/20 text-white'
+                                    : 'text-white/85 hover:bg-white/10 hover:text-white'
+                                }`
+                              }
+                            >
+                              {({ isActive }) => (
+                                <>
+                                  {isActive && (
+                                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[2.5px] rounded-r bg-white" />
+                                  )}
+                                  <span className="flex items-center gap-2.5 min-w-0">
+                                    <SubIcon className="w-4 h-4 shrink-0 text-white/90" />
+                                    <span className="truncate font-normal">{sub.label}</span>
+                                  </span>
+                                  {sub.badge ? (
+                                    <span className="ml-1 min-w-[20px] h-5 px-1 inline-flex items-center justify-center text-[11px] font-medium leading-none rounded-full bg-amber-400 text-slate-950 tabular-nums shrink-0">
+                                      {sub.badge}
+                                    </span>
+                                  ) : null}
+                                </>
+                              )}
+                            </NavLink>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </nav>
