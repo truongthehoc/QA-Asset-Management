@@ -27,11 +27,30 @@ export const AgentManagementPage: React.FC = () => {
   const [selectedTokenId, setSelectedTokenId] = useState<string>('');
   const [downloading, setDownloading] = useState(false);
 
-  const load = async () => {
+  const normalizeToken = (t: any) => {
+    const isExpired =
+      typeof t.isExpired === 'boolean'
+        ? t.isExpired
+        : Boolean(t.expiresAt && new Date(t.expiresAt).getTime() < Date.now());
+    const isExhausted = Boolean(t.maxUses && Number(t.usedCount || 0) >= Number(t.maxUses));
+    const isUsable =
+      typeof t.isUsable === 'boolean'
+        ? t.isUsable
+        : !t.isRevoked && !isExpired && !isExhausted;
+    return { ...t, isExpired, isExhausted, isUsable };
+  };
+
+  const load = async (preserveToken?: { id: string; rawToken: string }) => {
     const [tRes, vRes] = await Promise.all([api.get('/agents/tokens'), api.get('/agents/versions')]);
-    const tokenList: any[] = tRes.data || [];
+    const tokenList: any[] = (tRes.data || []).map(normalizeToken);
     setTokens(tokenList);
     setVersions(vRes.data || []);
+
+    if (preserveToken?.rawToken) {
+      setSelectedTokenId(preserveToken.id);
+      setInstallerForm((prev) => ({ ...prev, enrollmentToken: preserveToken.rawToken }));
+      return;
+    }
 
     // Auto-select first active usable token if none selected or previously selected was revoked
     const activeUsable = tokenList.filter((t) => t.isUsable && t.tokenValue);
@@ -77,10 +96,8 @@ export const AgentManagementPage: React.FC = () => {
       expiresDays: Number(tokenForm.expiresDays) || 30,
     });
     setNewRawToken(res.data.rawToken);
-    setSelectedTokenId(res.data.id || '');
-    setInstallerForm((f) => ({ ...f, enrollmentToken: res.data.rawToken }));
     setTokenForm({ name: '', maxUses: '100', expiresDays: '30' });
-    load();
+    load({ id: res.data.id || '', rawToken: res.data.rawToken });
   };
 
   const handleDownloadInstaller = async (e: React.FormEvent) => {

@@ -44,6 +44,12 @@ export const AssetStatusesPage: React.FC = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
   const openCreate = () => {
     setEditing(null);
     setForm({
@@ -99,11 +105,12 @@ export const AssetStatusesPage: React.FC = () => {
     setTogglingId(st.id);
     setFeedback(null);
     try {
-      await api.patch(`/admin/asset-statuses/${st.id}/active`, { isActive: !st.isActive });
+      const nextActive = !st.isActive;
+      await api.patch(`/admin/asset-statuses/${st.id}/active`, { isActive: nextActive });
       await Promise.all([load(), refresh()]);
       setFeedback({
-        type: 'ok',
-        text: `Đã ${!st.isActive ? 'kích hoạt' : 'ngưng sử dụng'} trạng thái "${st.name}".`,
+        type: nextActive ? 'ok' : 'err',
+        text: `Đã ${nextActive ? 'kích hoạt' : 'ngưng sử dụng'} trạng thái "${st.name}".`,
       });
     } catch (err: any) {
       setFeedback({

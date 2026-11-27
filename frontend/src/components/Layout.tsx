@@ -256,8 +256,8 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         { to: '/admin/departments', label: 'Phòng ban', icon: Building2, badge: 0, show: can('admin.catalogs') },
         { to: '/admin/locations', label: 'Vị trí', icon: MapPin, badge: 0, show: can('admin.catalogs') },
         { to: '/admin/employees', label: 'Nhân viên', icon: UserCheck, badge: 0, show: can('admin.catalogs') },
-        { to: '/admin/roles', label: 'Phân quyền', icon: Shield, badge: 0, show: can('admin.users') || can('admin.settings') },
         { to: '/admin/users', label: 'Người dùng', icon: Users, badge: 0, show: can('admin.users') },
+        { to: '/admin/roles', label: 'Phân quyền', icon: Shield, badge: 0, show: can('admin.users') || can('admin.settings') },
       ].filter((item) => item.show),
     },
     {

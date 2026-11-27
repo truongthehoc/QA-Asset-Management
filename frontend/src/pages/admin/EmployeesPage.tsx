@@ -28,14 +28,39 @@ export const EmployeesPage: React.FC = () => {
   });
 
   const load = async () => {
-    const [eRes, mRes] = await Promise.all([api.get('/admin/employees'), api.get('/admin/meta')]);
-    setItems(Array.isArray(eRes.data) ? eRes.data : []);
-    setDepartments(mRes.data?.departments || []);
+    const [eRes, mRes] = await Promise.allSettled([api.get('/admin/employees'), api.get('/admin/meta')]);
+    if (mRes.status === 'fulfilled') {
+      setDepartments(mRes.value.data?.departments || []);
+    }
+    if (eRes.status === 'fulfilled') {
+      setItems(Array.isArray(eRes.value.data) ? eRes.value.data : []);
+    } else {
+      setFeedback({
+        type: 'err',
+        text: (eRes.reason as any)?.response?.data?.message || 'Không tải được danh sách nhân viên. Kiểm tra backend đã cập nhật và đồng bộ DB chưa.',
+      });
+    }
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const timer = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
+
+  const ensureDepartments = async () => {
+    if (departments.length > 0) return;
+    try {
+      const mRes = await api.get('/admin/meta');
+      setDepartments(mRes.data?.departments || []);
+    } catch {
+      // ignore
+    }
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -50,6 +75,7 @@ export const EmployeesPage: React.FC = () => {
     });
     setFormErr('');
     setModalOpen(true);
+    ensureDepartments();
   };
 
   const openEdit = (emp: any) => {
@@ -65,6 +91,7 @@ export const EmployeesPage: React.FC = () => {
     });
     setFormErr('');
     setModalOpen(true);
+    ensureDepartments();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,10 +121,11 @@ export const EmployeesPage: React.FC = () => {
     setTogglingId(emp.id);
     setFeedback(null);
     try {
-      await api.patch(`/admin/employees/${emp.id}/active`, { isActive: !emp.isActive });
+      const nextActive = !emp.isActive;
+      await api.patch(`/admin/employees/${emp.id}/active`, { isActive: nextActive });
       setFeedback({
-        type: 'ok',
-        text: `Đã chuyển nhân viên "${emp.fullName}" sang trạng thái ${!emp.isActive ? 'Đang làm việc' : 'Ngưng hoạt động'}.`,
+        type: nextActive ? 'ok' : 'err',
+        text: `Đã chuyển nhân viên "${emp.fullName}" sang trạng thái ${nextActive ? 'Đang làm việc' : 'Ngưng hoạt động'}.`,
       });
       load();
     } catch (err: any) {

@@ -95,6 +95,7 @@ export class CatalogsService {
           phone: true,
           title: true,
           departmentId: true,
+          department: { select: { id: true, code: true, name: true } },
         },
         orderBy: { fullName: 'asc' },
       }),
@@ -643,25 +644,46 @@ export class CatalogsService {
   }
 
   async createUser(data: any, actor: AuthUser) {
-    if (!data.username || !data.email || !data.fullName) {
-      throw new BadRequestException('Thiếu thông tin username, email hoặc họ tên.');
+    const username = (data.username || '').trim();
+    if (!username) {
+      throw new BadRequestException('Vui lòng nhập tên đăng nhập (tài khoản).');
+    }
+    const dupUser = await this.prisma.user.findUnique({ where: { username } });
+    if (dupUser) {
+      throw new ConflictException(`Tài khoản "${username}" đã tồn tại.`);
     }
     let linkedEmp: any = null;
     if (data.employeeId) {
       linkedEmp = await this.prisma.employee.findUnique({ where: { id: data.employeeId } });
+      if (!linkedEmp) {
+        throw new BadRequestException('Nhân viên được chọn không tồn tại.');
+      }
     }
-    const departmentId = data.departmentId || linkedEmp?.departmentId || null;
+    const fullName = (data.fullName || linkedEmp?.fullName || '').trim();
+    if (!fullName) {
+      throw new BadRequestException('Vui lòng chọn nhân viên hoặc nhập họ tên.');
+    }
+    let email = (data.email || linkedEmp?.email || '').trim();
+    if (!email) {
+      email = `${username.toLowerCase().replace(/[^a-z0-9._-]/g, '') || 'user'}@internal.local`;
+    }
+    const dupEmail = await this.prisma.user.findUnique({ where: { email } });
+    if (dupEmail) {
+      email = `${username.toLowerCase().replace(/[^a-z0-9._-]/g, '')}.${Date.now().toString().slice(-4)}@internal.local`;
+    }
+    const departmentId = linkedEmp ? linkedEmp.departmentId || null : data.departmentId || null;
     const passwordHash = await bcrypt.hash(data.password || 'Admin@123', 10);
     const user = await this.prisma.user.create({
       data: {
-        username: data.username.trim(),
-        email: data.email.trim(),
-        fullName: data.fullName.trim(),
+        username,
+        email,
+        fullName,
         passwordHash,
-        employeeCode: data.employeeCode || linkedEmp?.code || null,
-        title: data.title || linkedEmp?.title || null,
+        employeeCode: linkedEmp?.code || data.employeeCode || null,
+        title: linkedEmp?.title || data.title || null,
         departmentId,
-        employeeId: data.employeeId || null,
+        employeeId: linkedEmp ? linkedEmp.id : null,
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
       },
     });
     if (data.roleId) {
@@ -692,18 +714,33 @@ export class CatalogsService {
     if (data.employeeId) {
       linkedEmp = await this.prisma.employee.findUnique({ where: { id: data.employeeId } });
     }
+    const nextDepartmentId = linkedEmp
+      ? linkedEmp.departmentId || null
+      : data.employeeId === null
+        ? null
+        : existing.departmentId;
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
-        fullName: data.fullName !== undefined ? String(data.fullName).trim() : existing.fullName,
-        email: data.email !== undefined ? String(data.email).trim() : existing.email,
-        title: data.title !== undefined ? (data.title?.trim() || null) : existing.title,
-        employeeId: data.employeeId !== undefined ? (data.employeeId || null) : existing.employeeId,
-        employeeCode: linkedEmp ? linkedEmp.code : existing.employeeCode,
-        departmentId:
-          data.departmentId !== undefined
-            ? (data.departmentId || linkedEmp?.departmentId || null)
-            : (linkedEmp?.departmentId ?? existing.departmentId),
+        fullName: linkedEmp
+          ? linkedEmp.fullName
+          : data.fullName !== undefined
+            ? String(data.fullName).trim()
+            : existing.fullName,
+        email: linkedEmp?.email
+          ? linkedEmp.email
+          : data.email !== undefined && String(data.email).trim()
+            ? String(data.email).trim()
+            : existing.email,
+        title: linkedEmp
+          ? linkedEmp.title || null
+          : data.title !== undefined
+            ? data.title?.trim() || null
+            : existing.title,
+        employeeId: data.employeeId !== undefined ? data.employeeId || null : existing.employeeId,
+        employeeCode: linkedEmp ? linkedEmp.code : data.employeeId === null ? null : existing.employeeCode,
+        departmentId: nextDepartmentId,
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : existing.isActive,
       },
     });
     await this.auditService.log({
