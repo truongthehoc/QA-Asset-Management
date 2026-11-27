@@ -480,9 +480,12 @@ export class AgentsService {
 
     // Update DeviceAgent metadata (NOT Asset official specs / NOT Baseline!)
     const primaryPhysicalNic = networkAdapters.find((n: any) => !n.isVirtual && n.ipAddress);
+    const reportedHostname = (snapshot.hostname || '').trim();
     await this.prisma.deviceAgent.update({
       where: { id: agent.id },
       data: {
+        hostname: reportedHostname || agent.hostname,
+        computerName: (snapshot.computerName || reportedHostname || agent.computerName),
         lastSnapshotAt: new Date(),
         lastHeartbeatAt: new Date(),
         status: agent.status === 'CONFLICT' ? 'CONFLICT' : 'ONLINE',
@@ -496,11 +499,30 @@ export class AgentsService {
       },
     });
 
+    // Keep linked Asset hostname synced; only auto-update Asset name if it still matches previous hostname (respect user's custom name)
+    if (agent.assetId && reportedHostname) {
+      const linkedAsset = await this.prisma.asset.findUnique({
+        where: { id: agent.assetId },
+        select: { name: true, hostname: true },
+      });
+      if (linkedAsset) {
+        const shouldSyncName = !linkedAsset.name || linkedAsset.name === linkedAsset.hostname;
+        await this.prisma.asset.update({
+          where: { id: agent.assetId },
+          data: {
+            hostname: reportedHostname,
+            ...(shouldSyncName ? { name: reportedHostname } : {}),
+          },
+        });
+      }
+    }
+
     // Update DiscoveredDevice preview if still pending
     if (!agent.assetId) {
       await this.prisma.discoveredDevice.updateMany({
         where: { agentId: agent.id, approvalStatus: { in: ['PENDING', 'VERIFY_CONFLICT'] } },
         data: {
+          hostname: reportedHostname || undefined,
           cpuSummary: processors[0]?.name || undefined,
           ramTotalGb: totalRamGb || undefined,
           diskSummary: disks.map((d: any) => `${d.model} ${d.sizeGb}GB`).join(', ') || undefined,
@@ -897,6 +919,64 @@ export class AgentsService {
     const chunkB64 = (buf: Buffer) =>
       (buf.toString('base64').match(/.{1,120}/g) || []).join('\r\n');
 
+    const bootstrapPs1 = [
+      '$ErrorActionPreference = "Stop"',
+      '$self = $env:ITAM_SETUP_SELF',
+      'if (-not $self -or -not (Test-Path -LiteralPath $self)) { throw "Khong tim thay file cai dat goc." }',
+      '$raw = Get-Content -LiteralPath $self -Raw',
+      'function Extract-Block([string]$name, [string]$dest) {',
+      '    $pattern = "::BEGIN_" + $name + "\\r?\\n([\\s\\S]*?)\\r?\\n::END_" + $name',
+      '    $m = [regex]::Match($raw, $pattern)',
+      '    if (-not $m.Success) { throw "Khong doc duoc goi du lieu: $name" }',
+      '    $b64 = $m.Groups[1].Value -replace "\\s+", ""',
+      '    [IO.File]::WriteAllBytes($dest, [Convert]::FromBase64String($b64))',
+      '}',
+      '$installDir = "C:\\Program Files\\ITAssetAgent"',
+      '$dataDir = "C:\\ProgramData\\ITAssetAgent"',
+      'Stop-ScheduledTask -TaskName "ITAssetManagementAgent" -ErrorAction SilentlyContinue',
+      'Get-CimInstance Win32_Process -Filter "Name=\'powershell.exe\'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match "ITAssetAgent\\.ps1" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }',
+      'New-Item -ItemType Directory -Path $installDir -Force | Out-Null',
+      'New-Item -ItemType Directory -Path $dataDir -Force | Out-Null',
+      'Extract-Block "AGENT_PS1" (Join-Path $installDir "ITAssetAgent.ps1")',
+      'Extract-Block "TRAY_PS1" (Join-Path $installDir "ITAssetAgentTray.ps1")',
+      'Extract-Block "UNINSTALL_BAT" (Join-Path $installDir "uninstall.bat")',
+      'Extract-Block "CONFIG_JSON" (Join-Path $dataDir "config.json")',
+      'Remove-Item -Path (Join-Path $dataDir "state.json") -Force -ErrorAction SilentlyContinue',
+      'Write-Host "[1/3] Da giai nen file Agent va cau hinh thanh cong."',
+      'Write-Host "[2/3] Dang dang ky (Enroll) va dong bo cau hinh lan dau ve may chu..."',
+      '& powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installDir "ITAssetAgent.ps1") -Mode Once -ConfigPath (Join-Path $dataDir "config.json")',
+      'if ($LASTEXITCODE -ne 0) { throw "Dong bo lan dau that bai (ma loi $LASTEXITCODE). Kiem tra URL may chu va Enrollment Token trong config.json." }',
+      '$agentArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"C:\\Program Files\\ITAssetAgent\\ITAssetAgent.ps1`" -Mode Daemon -ConfigPath `"C:\\ProgramData\\ITAssetAgent\\config.json`""',
+      '$a1 = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $agentArgs',
+      '$t1 = New-ScheduledTaskTrigger -AtStartup',
+      '$p1 = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest',
+      '$s1 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)',
+      'Register-ScheduledTask -TaskName "ITAssetManagementAgent" -Action $a1 -Trigger $t1 -Principal $p1 -Settings $s1 -Force | Out-Null',
+      'Start-ScheduledTask -TaskName "ITAssetManagementAgent"',
+      '$trayArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"C:\\Program Files\\ITAssetAgent\\ITAssetAgentTray.ps1`""',
+      '$a2 = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $trayArgs',
+      '$t2 = New-ScheduledTaskTrigger -AtLogOn',
+      '$p2 = New-ScheduledTaskPrincipal -GroupId "BUILTIN\\Users" -RunLevel Limited',
+      '$s2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)',
+      'Register-ScheduledTask -TaskName "ITAssetManagementAgentTray" -Action $a2 -Trigger $t2 -Principal $p2 -Settings $s2 -Force | Out-Null',
+      'Start-Process powershell.exe -ArgumentList $trayArgs',
+      'Write-Host "[3/3] Da dang ky va khoi dong dich vu chay ngam (SYSTEM) + System Tray."',
+    ].join('\r\n');
+
+    const loaderPs1 = [
+      '$ErrorActionPreference="Stop"',
+      '$r=Get-Content -LiteralPath $env:ITAM_SETUP_SELF -Raw',
+      '$m=[regex]::Match($r,"::BEGIN_INSTALL_PS1\\r?\\n([\\s\\S]*?)\\r?\\n::END_INSTALL_PS1")',
+      'if(-not $m.Success){throw "Missing INSTALL_PS1"}',
+      '$t=Join-Path $env:TEMP "itam-install.ps1"',
+      '[IO.File]::WriteAllBytes($t,[Convert]::FromBase64String(($m.Groups[1].Value -replace "\\s+","")))',
+      '& $t',
+      'exit $LASTEXITCODE',
+    ].join(';');
+
+    const encodedLoader = Buffer.from(loaderPs1, 'utf16le').toString('base64');
+    const bootstrapBuf = Buffer.from(bootstrapPs1, 'utf8');
+
     const bat = [
       '@echo off',
       'chcp 65001 >nul',
@@ -915,38 +995,13 @@ export class AgentsService {
       `echo   May chu: ${backendUrl}`,
       'echo ============================================================',
       'set "ITAM_SETUP_SELF=%~f0"',
-      'powershell -NoProfile -ExecutionPolicy Bypass -Command ^',
-      '  "$self = $env:ITAM_SETUP_SELF; $raw = Get-Content -LiteralPath $self -Raw;' +
-        ' function Extract-Block($name, $dest) {' +
-        '   $m = [regex]::Match($raw, \"::BEGIN_$name\\r?\\n([\\s\\S]*?)\\r?\\n::END_$name\");' +
-        '   if (-not $m.Success) { throw \"Khong doc duoc goi $name\" };' +
-        '   $b64 = ($m.Groups[1].Value -replace \'\\s+\', \'\');' +
-        '   [IO.File]::WriteAllBytes($dest, [Convert]::FromBase64String($b64));' +
-        ' };' +
-        ' $installDir = \'C:\\Program Files\\ITAssetAgent\';' +
-        ' $dataDir = \'C:\\ProgramData\\ITAssetAgent\';' +
-        ' New-Item -ItemType Directory -Path $installDir -Force | Out-Null;' +
-        ' New-Item -ItemType Directory -Path $dataDir -Force | Out-Null;' +
-        ' Extract-Block \'AGENT_PS1\' (Join-Path $installDir \'ITAssetAgent.ps1\');' +
-        ' Extract-Block \'TRAY_PS1\' (Join-Path $installDir \'ITAssetAgentTray.ps1\');' +
-        ' Extract-Block \'UNINSTALL_BAT\' (Join-Path $installDir \'uninstall.bat\');' +
-        ' Extract-Block \'CONFIG_JSON\' (Join-Path $dataDir \'config.json\');' +
-        ' Write-Host \'[1/3] Da giai nen file Agent va cau hinh thanh cong.\';' +
-        ' $a1 = New-ScheduledTaskAction -Execute \'powershell.exe\' -Argument \'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Program Files\\ITAssetAgent\\ITAssetAgent.ps1\" -Mode Daemon -ConfigPath \"C:\\ProgramData\\ITAssetAgent\\config.json\"\';' +
-        ' $t1 = New-ScheduledTaskTrigger -AtStartup;' +
-        ' $p1 = New-ScheduledTaskPrincipal -UserId \'SYSTEM\' -LogonType ServiceAccount -RunLevel Highest;' +
-        ' $s1 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero);' +
-        ' Register-ScheduledTask -TaskName \'ITAssetManagementAgent\' -Action $a1 -Trigger $t1 -Principal $p1 -Settings $s1 -Force | Out-Null;' +
-        ' Start-ScheduledTask -TaskName \'ITAssetManagementAgent\';' +
-        ' Write-Host \'[2/3] Da dang ky va khoi dong dich vu chay ngam (SYSTEM).\';' +
-        ' $a2 = New-ScheduledTaskAction -Execute \'powershell.exe\' -Argument \'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Program Files\\ITAssetAgent\\ITAssetAgentTray.ps1\"\';' +
-        ' $t2 = New-ScheduledTaskTrigger -AtLogOn;' +
-        ' $p2 = New-ScheduledTaskPrincipal -GroupId \'BUILTIN\\Users\' -RunLevel Limited;' +
-        ' $s2 = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero);' +
-        ' Register-ScheduledTask -TaskName \'ITAssetManagementAgentTray\' -Action $a2 -Trigger $t2 -Principal $p2 -Settings $s2 -Force | Out-Null;' +
-        ' Start-Process powershell.exe -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\\Program Files\\ITAssetAgent\\ITAssetAgentTray.ps1\"\';' +
-        ' Write-Host \'[3/3] Dang dong bo cau hinh lan dau ve may chu...\';' +
-        ' & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $installDir \'ITAssetAgent.ps1\') -Mode Once -ConfigPath (Join-Path $dataDir \'config.json\')"',
+      `powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand ${encodedLoader}`,
+      'if %errorLevel% neq 0 (',
+      '    echo.',
+      '    echo [LOI] Cai dat that bai! Vui long kiem tra thong bao loi o tren.',
+      '    pause',
+      '    exit /b %errorLevel%',
+      ')',
       'echo.',
       'echo ============================================================',
       'echo   HOAN TAT CAI DAT WINDOWS AGENT!',
@@ -957,6 +1012,9 @@ export class AgentsService {
       'pause',
       'exit /b 0',
       '',
+      '::BEGIN_INSTALL_PS1',
+      chunkB64(bootstrapBuf),
+      '::END_INSTALL_PS1',
       '::BEGIN_AGENT_PS1',
       chunkB64(agentPs1),
       '::END_AGENT_PS1',

@@ -58,8 +58,8 @@ export const AssetsPage: React.FC = () => {
     }
   };
 
-  const loadAssets = async (searchQuery = debouncedSearch) => {
-    setLoading(true);
+  const loadAssets = async (searchQuery = debouncedSearch, silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const params: any = {};
       if (searchQuery.trim()) params.search = searchQuery.trim();
@@ -68,9 +68,9 @@ export const AssetsPage: React.FC = () => {
       if (deptFilter) params.departmentId = deptFilter;
       const res = await api.get('/assets', { params });
       setAssets(res.data || []);
-      setCurrentPage(1);
+      if (!silent) setCurrentPage(1);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -94,6 +94,12 @@ export const AssetsPage: React.FC = () => {
 
   useEffect(() => {
     loadAssets(debouncedSearch);
+    const onRealtime = () => {
+      loadSummary();
+      loadAssets(debouncedSearch, true);
+    };
+    window.addEventListener('itam:realtime-update', onRealtime);
+    return () => window.removeEventListener('itam:realtime-update', onRealtime);
   }, [debouncedSearch, statusFilter, typeFilter, deptFilter]);
 
   const stats = useMemo(() => {

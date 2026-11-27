@@ -47,6 +47,7 @@ export const AssetCreatePage: React.FC = () => {
     assetTypes: [],
     locations: [],
     suppliers: [],
+    users: [],
   });
   const [errorMsg, setErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
@@ -63,6 +64,7 @@ export const AssetCreatePage: React.FC = () => {
     hostname: '',
     managingDepartmentId: '',
     usingDepartmentId: '',
+    assignedUserId: '',
     assignedUserName: '',
     locationId: '',
     locationDetail: '',
@@ -171,6 +173,7 @@ export const AssetCreatePage: React.FC = () => {
         hostname: form.hostname || undefined,
         managingDepartmentId: form.managingDepartmentId || undefined,
         usingDepartmentId: form.usingDepartmentId || undefined,
+        assignedUserId: form.assignedUserId || undefined,
         assignedUserName: form.assignedUserName || undefined,
         locationId: form.locationId || undefined,
         locationDetail: form.locationDetail || undefined,
@@ -393,7 +396,17 @@ export const AssetCreatePage: React.FC = () => {
               <label className="label-field">Phòng ban sử dụng</label>
               <select
                 value={form.usingDepartmentId}
-                onChange={(e) => setForm({ ...form, usingDepartmentId: e.target.value })}
+                onChange={(e) => {
+                  const nextDeptId = e.target.value;
+                  const currentSelected = (meta.users || []).find((u: any) => u.id === form.assignedUserId);
+                  const keepUser = currentSelected && (!nextDeptId || currentSelected.departmentId === nextDeptId);
+                  setForm({
+                    ...form,
+                    usingDepartmentId: nextDeptId,
+                    assignedUserId: keepUser ? form.assignedUserId : '',
+                    assignedUserName: keepUser ? form.assignedUserName : '',
+                  });
+                }}
                 className="input-field"
               >
                 <option value="">-- Kho / Chưa phân bổ --</option>
@@ -406,12 +419,40 @@ export const AssetCreatePage: React.FC = () => {
             </div>
             <div>
               <label className="label-field">Người sử dụng</label>
-              <input
-                value={form.assignedUserName}
-                onChange={(e) => setForm({ ...form, assignedUserName: e.target.value })}
-                className="input-field"
-                placeholder="Nhập họ và tên người sử dụng"
-              />
+              {(() => {
+                const deptUsers = (meta.users || []).filter(
+                  (u: any) => !form.usingDepartmentId || u.departmentId === form.usingDepartmentId,
+                );
+                return (
+                  <select
+                    value={form.assignedUserId}
+                    onChange={(e) => {
+                      const uid = e.target.value;
+                      const chosen = deptUsers.find((u: any) => u.id === uid);
+                      setForm({
+                        ...form,
+                        assignedUserId: uid,
+                        assignedUserName: chosen ? chosen.fullName : '',
+                        receivedBy: form.receivedBy || (chosen ? chosen.fullName : ''),
+                      });
+                    }}
+                    className="input-field"
+                  >
+                    <option value="">
+                      {!form.usingDepartmentId
+                        ? '-- Chọn người sử dụng --'
+                        : deptUsers.length === 0
+                          ? '-- Phòng ban chưa có người dùng --'
+                          : `-- Chọn người dùng (${deptUsers.length}) --`}
+                    </option>
+                    {deptUsers.map((u: any) => (
+                      <option key={u.id} value={u.id}>
+                        {u.fullName} ({u.username}){u.title ? ` — ${u.title}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
             </div>
             <div>
               <label className="label-field">Vị trí đặt thiết bị</label>

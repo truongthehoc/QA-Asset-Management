@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Lock, Unlock } from 'lucide-react';
+import { Plus, Pencil, Search, Lock, Unlock } from 'lucide-react';
 import { api } from '../../api/client';
 import { PageHeader, Modal, Badge } from '../../components/UiPrimitives';
 import { formatDateTime } from '../../utils/format';
@@ -9,6 +9,7 @@ export const UsersPage: React.FC = () => {
   const [meta, setMeta] = useState<any>({ departments: [], roles: [] });
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
   const [msg, setMsg] = useState('');
   const [form, setForm] = useState({
     username: '',
@@ -31,13 +32,44 @@ export const UsersPage: React.FC = () => {
     load();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ username: '', email: '', fullName: '', title: '', password: '', roleId: '', departmentId: '', scopeType: 'DEPARTMENT' });
+    setOpen(true);
+  };
+
+  const openEdit = (u: any) => {
+    setEditing(u);
+    setForm({
+      username: u.username || '',
+      email: u.email || '',
+      fullName: u.fullName || '',
+      title: u.title || '',
+      password: '',
+      roleId: u.userRoles?.[0]?.roleId || '',
+      departmentId: u.department?.id || '',
+      scopeType: u.userRoles?.[0]?.scopeType || 'DEPARTMENT',
+    });
+    setOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');
-    await api.post('/admin/users', form);
+    if (editing) {
+      await api.patch(`/admin/users/${editing.id}`, {
+        fullName: form.fullName,
+        email: form.email,
+        title: form.title,
+        departmentId: form.departmentId || null,
+      });
+      setMsg(`Đã cập nhật thông tin & phòng ban cho "${form.fullName.trim()}".`);
+    } else {
+      await api.post('/admin/users', form);
+      setMsg('Đã tạo người dùng mới thành công.');
+    }
     setOpen(false);
-    setForm({ username: '', email: '', fullName: '', title: '', password: '', roleId: '', departmentId: '', scopeType: 'DEPARTMENT' });
-    setMsg('Đã tạo người dùng mới thành công.');
+    setEditing(null);
     load();
   };
 
@@ -60,7 +92,7 @@ export const UsersPage: React.FC = () => {
         title="Quản lý Người dùng"
         subtitle="Quản lý tài khoản đăng nhập nội bộ, đơn vị công tác, trạng thái hoạt động và phạm vi dữ liệu."
         actions={
-          <button onClick={() => setOpen(true)} className="btn-primary">
+          <button onClick={openCreate} className="btn-primary">
             <Plus className="w-4 h-4" /> Tạo người dùng
           </button>
         }
@@ -113,9 +145,14 @@ export const UsersPage: React.FC = () => {
                     />
                   </td>
                   <td className="td-cell text-right">
-                    <button onClick={() => handleToggle(u)} className="btn-secondary px-2 py-1 text-xs" title={u.isActive ? 'Khóa tài khoản' : 'Mở khóa'}>
-                      {u.isActive ? <Lock className="w-3.5 h-3.5 text-amber-700" /> : <Unlock className="w-3.5 h-3.5 text-emerald-700" />}
-                    </button>
+                    <div className="inline-flex items-center gap-1.5">
+                      <button onClick={() => openEdit(u)} className="btn-secondary px-2 py-1 text-xs" title="Sửa thông tin & gán phòng ban">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleToggle(u)} className="btn-secondary px-2 py-1 text-xs" title={u.isActive ? 'Khóa tài khoản' : 'Mở khóa'}>
+                        {u.isActive ? <Lock className="w-3.5 h-3.5 text-amber-700" /> : <Unlock className="w-3.5 h-3.5 text-emerald-700" />}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -124,27 +161,35 @@ export const UsersPage: React.FC = () => {
         </div>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Tạo tài khoản người dùng mới" maxWidth="max-w-xl">
-        <form onSubmit={handleCreate} className="space-y-3.5">
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? `Chỉnh sửa người dùng — ${editing.username}` : 'Tạo tài khoản người dùng mới'} maxWidth="max-w-xl">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div className="grid sm:grid-cols-2 gap-3">
-            <div><label className="label-field">Username <span className="text-red-500">*</span></label><input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="input-field font-mono" placeholder="Nhập tên đăng nhập" /></div>
-            <div><label className="label-field">Mật khẩu mặc định</label><input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input-field" placeholder="Nhập mật khẩu khởi tạo" /></div>
+            {!editing && (
+              <>
+                <div><label className="label-field">Username <span className="text-red-500">*</span></label><input required value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} className="input-field font-mono" placeholder="Nhập tên đăng nhập" /></div>
+                <div><label className="label-field">Mật khẩu mặc định</label><input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className="input-field" placeholder="Nhập mật khẩu khởi tạo" /></div>
+              </>
+            )}
             <div><label className="label-field">Họ và tên <span className="text-red-500">*</span></label><input required value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} className="input-field" placeholder="Nhập họ và tên" /></div>
             <div><label className="label-field">Email <span className="text-red-500">*</span></label><input required type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="input-field" placeholder="Nhập địa chỉ email" /></div>
-            <div>
-              <label className="label-field">Vai trò RBAC <span className="text-red-500">*</span></label>
-              <select required value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })} className="input-field">
-                <option value="">-- Chọn vai trò --</option>
-                {meta.roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label-field">Phạm vi phân quyền</label>
-              <select value={form.scopeType} onChange={(e) => setForm({ ...form, scopeType: e.target.value })} className="input-field">
-                <option value="ORGANIZATION">Toàn công ty</option>
-                <option value="DEPARTMENT">Theo phòng ban</option>
-              </select>
-            </div>
+            {!editing && (
+              <>
+                <div>
+                  <label className="label-field">Vai trò RBAC <span className="text-red-500">*</span></label>
+                  <select required value={form.roleId} onChange={(e) => setForm({ ...form, roleId: e.target.value })} className="input-field">
+                    <option value="">-- Chọn vai trò --</option>
+                    {meta.roles.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-field">Phạm vi phân quyền</label>
+                  <select value={form.scopeType} onChange={(e) => setForm({ ...form, scopeType: e.target.value })} className="input-field">
+                    <option value="ORGANIZATION">Toàn công ty</option>
+                    <option value="DEPARTMENT">Theo phòng ban</option>
+                  </select>
+                </div>
+              </>
+            )}
             <div>
               <label className="label-field">Phòng ban</label>
               <select value={form.departmentId} onChange={(e) => setForm({ ...form, departmentId: e.target.value })} className="input-field">
@@ -152,11 +197,11 @@ export const UsersPage: React.FC = () => {
                 {meta.departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
-            <div><label className="label-field">Chức danh</label><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="input-field" /></div>
+            <div><label className="label-field">Chức danh</label><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} className="input-field" placeholder="Nhập chức danh" /></div>
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-line">
             <button type="button" onClick={() => setOpen(false)} className="btn-secondary">Hủy</button>
-            <button type="submit" className="btn-primary">Tạo tài khoản</button>
+            <button type="submit" className="btn-primary">{editing ? 'Lưu thay đổi' : 'Tạo tài khoản'}</button>
           </div>
         </form>
       </Modal>

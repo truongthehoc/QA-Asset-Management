@@ -6,6 +6,7 @@ import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DiscoveryPage } from './pages/DiscoveryPage';
+import { DiscoveryApprovePage } from './pages/DiscoveryApprovePage';
 import { AssetsPage } from './pages/AssetsPage';
 import { AssetCreatePage } from './pages/AssetCreatePage';
 import { AssetDetailPage } from './pages/AssetDetailPage';
@@ -45,6 +46,7 @@ export function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/discovery" element={<ProtectedRoute><DiscoveryPage /></ProtectedRoute>} />
+          <Route path="/discovery/approve/:id" element={<ProtectedRoute><DiscoveryApprovePage /></ProtectedRoute>} />
           <Route path="/assets" element={<ProtectedRoute><AssetsPage /></ProtectedRoute>} />
           <Route path="/assets/new" element={<ProtectedRoute><AssetCreatePage /></ProtectedRoute>} />
           <Route path="/assets/:id" element={<ProtectedRoute><AssetDetailPage /></ProtectedRoute>} />

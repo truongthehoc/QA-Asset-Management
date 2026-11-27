@@ -417,8 +417,20 @@ try {
         $inv = Collect-HardwareInventory
         $wasNew = -not (Test-Path $StatePath)
         $state = Ensure-Enrolled -Config $cfg -Inventory $inv
-        Send-Snapshot -Config $cfg -State $state -Inventory $inv -Source $(if ($wasNew) { "INITIAL" } else { "MANUAL" }) | Out-Null
-        Send-Heartbeat -Config $cfg -State $state -Inventory $inv | Out-Null
+        try {
+            Send-Snapshot -Config $cfg -State $state -Inventory $inv -Source $(if ($wasNew) { "INITIAL" } else { "MANUAL" }) | Out-Null
+            Send-Heartbeat -Config $cfg -State $state -Inventory $inv | Out-Null
+        } catch {
+            if ($_.Exception.Message -match "401|Unauthorized" -and $cfg.EnrollmentToken) {
+                Write-AgentLog "Token cu khong hop le (401). Dang xoa state.json va dang ky lai (Re-Enroll)..." "WARN"
+                Remove-Item -Path $StatePath -Force -ErrorAction SilentlyContinue
+                $state = Ensure-Enrolled -Config $cfg -Inventory $inv
+                Send-Snapshot -Config $cfg -State $state -Inventory $inv -Source "INITIAL" | Out-Null
+                Send-Heartbeat -Config $cfg -State $state -Inventory $inv | Out-Null
+            } else {
+                throw
+            }
+        }
         Write-AgentLog "Hoan tat dong bo thu cong."
         exit 0
     }
@@ -478,6 +490,11 @@ try {
             }
         } catch {
             $errText = $_.Exception.Message
+            if ($errText -match "401|Unauthorized" -and (Test-Path $StatePath) -and $cfg.EnrollmentToken) {
+                Write-AgentLog "Token cu bi tu choi (401). Dang xoa state.json de tu dang ky lai o chu ky ke tiep..." "WARN"
+                Remove-Item -Path $StatePath -Force -ErrorAction SilentlyContinue
+                $isFirstRun = $true
+            }
             Write-AgentLog "Loi dong bo: $errText" "ERROR"
             Save-Status -StateText "ERROR" -BackendUrl $baseUrl -LastError $errText
         }

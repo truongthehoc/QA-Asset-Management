@@ -29,38 +29,12 @@ export const DiscoveryPage: React.FC = () => {
   const [scanningId, setScanningId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
-  // Approval Modal State (SRS Section 7)
-  const [approveTarget, setApproveTarget] = useState<any>(null);
-  const [codePreview, setCodePreview] = useState('');
-  const [approveForm, setApproveForm] = useState<any>({
-    codeMode: 'AUTO',
-    assetCode: '',
-    name: '',
-    assetTypeId: '',
-    status: 'IN_USE',
-    serialNumber: '',
-    usingDepartmentId: '',
-    managingDepartmentId: '',
-    assignedUserName: '',
-    locationId: '',
-    locationDetail: '',
-    notes: '',
-    purchaseDate: '',
-    supplierId: '',
-    contractNumber: '',
-    invoiceNumber: '',
-    purchasePrice: '',
-    fundingSource: '',
-    warrantyStartDate: '',
-    warrantyEndDate: '',
-  });
-
   // Add Network Modal
   const [netModalOpen, setNetModalOpen] = useState(false);
   const [netForm, setNetForm] = useState({ name: '', cidr: '', vlan: '', description: '' });
 
-  const loadAll = async () => {
-    setLoading(true);
+  const loadAll = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [devRes, agRes, netRes, scanRes, metaRes] = await Promise.all([
         api.get('/discovery/devices'),
@@ -75,91 +49,16 @@ export const DiscoveryPage: React.FC = () => {
       setScans(scanRes.data);
       setMeta(metaRes.data);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     loadAll();
+    const onRealtime = () => loadAll(true);
+    window.addEventListener('itam:realtime-update', onRealtime);
+    return () => window.removeEventListener('itam:realtime-update', onRealtime);
   }, []);
-
-  const openApproveModal = async (dev: any) => {
-    const defaultType = meta.assetTypes.find((t: any) => t.code === 'PC') || meta.assetTypes[0];
-    const itDept = meta.departments.find((d: any) => d.code === 'IT');
-    setApproveTarget(dev);
-    setApproveForm({
-      codeMode: 'AUTO',
-      assetCode: '',
-      name: `${dev.manufacturer || ''} ${dev.model || dev.hostname || 'Thiết bị mới'}`.trim(),
-      assetTypeId: defaultType?.id || '',
-      status: 'IN_USE',
-      serialNumber: dev.serialNumber || '',
-      usingDepartmentId: '',
-      managingDepartmentId: itDept?.id || '',
-      assignedUserName: '',
-      locationId: '',
-      locationDetail: '',
-      notes: '',
-      purchaseDate: new Date().toISOString().slice(0, 10),
-      supplierId: '',
-      contractNumber: '',
-      invoiceNumber: '',
-      purchasePrice: '',
-      fundingSource: 'Ngân sách CNTT 2026',
-      warrantyStartDate: new Date().toISOString().slice(0, 10),
-      warrantyEndDate: '',
-    });
-    if (defaultType?.id) {
-      api.get(`/assets/preview-code?assetTypeId=${defaultType.id}`).then((r) => setCodePreview(r.data.preview)).catch(() => {});
-    }
-  };
-
-  const handleTypeChange = (typeId: string) => {
-    setApproveForm((f: any) => ({ ...f, assetTypeId: typeId }));
-    if (typeId) {
-      api.get(`/assets/preview-code?assetTypeId=${typeId}`).then((r) => setCodePreview(r.data.preview)).catch(() => {});
-    }
-  };
-
-  const handleApproveSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFeedback(null);
-    try {
-      const payload = {
-        codeMode: approveForm.codeMode,
-        assetCode: approveForm.codeMode === 'MANUAL' ? approveForm.assetCode : undefined,
-        name: approveForm.name,
-        assetTypeId: approveForm.assetTypeId,
-        status: approveForm.status,
-        serialNumber: approveForm.serialNumber,
-        managingDepartmentId: approveForm.managingDepartmentId || undefined,
-        usingDepartmentId: approveForm.usingDepartmentId || undefined,
-        assignedUserName: approveForm.assignedUserName || undefined,
-        locationId: approveForm.locationId || undefined,
-        locationDetail: approveForm.locationDetail || undefined,
-        notes: approveForm.notes || undefined,
-        purchase: {
-          purchaseDate: approveForm.purchaseDate || undefined,
-          supplierId: approveForm.supplierId || undefined,
-          contractNumber: approveForm.contractNumber || undefined,
-          invoiceNumber: approveForm.invoiceNumber || undefined,
-          purchasePrice: approveForm.purchasePrice ? Number(approveForm.purchasePrice) : undefined,
-          fundingSource: approveForm.fundingSource || undefined,
-          warrantyStartDate: approveForm.warrantyStartDate || undefined,
-          warrantyEndDate: approveForm.warrantyEndDate || undefined,
-        },
-      };
-      const res = await api.post(`/discovery/devices/${approveTarget.id}/approve`, payload);
-      setApproveTarget(null);
-      setFeedback({
-        type: 'ok',
-        text: `Đã duyệt thành tài sản chính thức với mã ${res.data.assetCode} và thiết lập Baseline v1.`,
-      });
-      loadAll();
-    } catch (err: any) {
-      setFeedback({ type: 'err', text: err.response?.data?.message || 'Lỗi khi duyệt thiết bị.' });
-    }
-  };
 
   const handleIgnore = async (dev: any) => {
     const reason = window.prompt('Nhập lý do bỏ qua thiết bị này:', 'Thiết bị cá nhân / không thuộc diện quản lý');
@@ -236,7 +135,7 @@ export const DiscoveryPage: React.FC = () => {
             : 'Thiết bị đăng ký tự động từ Windows Agent phải qua bước IT kiểm duyệt trước khi trở thành tài sản chính thức.'
         }
         actions={
-          <button onClick={loadAll} className="btn-secondary">
+          <button onClick={() => loadAll()} className="btn-secondary">
             <RefreshCw className="w-4 h-4" />
             Tải lại
           </button>
@@ -363,9 +262,9 @@ export const DiscoveryPage: React.FC = () => {
                         <div className="inline-flex items-center gap-1.5">
                           {['PENDING', 'VERIFY_CONFLICT'].includes(dev.approvalStatus) && can('discovery.approve') && (
                             <>
-                              <button onClick={() => openApproveModal(dev)} className="btn-primary px-2.5 py-1.5 text-xs">
+                              <Link to={`/discovery/approve/${dev.id}`} className="btn-primary px-2.5 py-1.5 text-xs">
                                 <CheckCircle className="w-3.5 h-3.5" /> Duyệt
-                              </button>
+                              </Link>
                               <button onClick={() => handleIgnore(dev)} className="btn-secondary px-2.5 py-1.5 text-xs">
                                 <XCircle className="w-3.5 h-3.5" /> Bỏ qua
                               </button>
@@ -542,210 +441,6 @@ export const DiscoveryPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Approval Modal (SRS Section 7.2 & 7.3) */}
-      <Modal
-        open={!!approveTarget}
-        onClose={() => setApproveTarget(null)}
-        title={`Duyệt ghi nhận tài sản chính thức — ${approveTarget?.hostname || approveTarget?.ipAddress}`}
-        subtitle="Thiết lập mã tài sản (tự sinh hoặc nhập thủ công), bổ sung thông tin sử dụng, mua sắm và chốt Baseline v1."
-        maxWidth="max-w-3xl"
-      >
-        <form onSubmit={handleApproveSubmit} className="space-y-5">
-          {/* Asset Code Dual Mode (SRS 7.3) */}
-          <div className="p-3.5 rounded-md bg-slate-50 border border-line space-y-3">
-            <div className="text-xs font-semibold text-ink-primary">Phương thức thiết lập mã tài sản (Mục 7.3)</div>
-            <div className="flex gap-4 text-sm">
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  checked={approveForm.codeMode === 'AUTO'}
-                  onChange={() => setApproveForm({ ...approveForm, codeMode: 'AUTO' })}
-                />
-                <span>Tự động sinh mã</span>
-              </label>
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  checked={approveForm.codeMode === 'MANUAL'}
-                  onChange={() => setApproveForm({ ...approveForm, codeMode: 'MANUAL' })}
-                />
-                <span>Nhập mã thủ công (theo quy ước riêng)</span>
-              </label>
-            </div>
-            {approveForm.codeMode === 'AUTO' ? (
-              <div className="text-xs text-ink-secondary">
-                Mã dự kiến sinh tự động:{' '}
-                <span className="font-mono font-semibold text-brand bg-white px-2 py-0.5 rounded border border-line">
-                  {codePreview || 'IT-PC-2026-xxxx'}
-                </span>
-              </div>
-            ) : (
-              <div>
-                <label className="label-field">Mã tài sản thủ công <span className="text-red-500">*</span></label>
-                <input
-                  required
-                  value={approveForm.assetCode}
-                  onChange={(e) => setApproveForm({ ...approveForm, assetCode: e.target.value })}
-                  className="input-field font-mono"
-                  placeholder="Nhập mã tài sản"
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="grid sm:grid-cols-2 gap-3.5">
-            <div>
-              <label className="label-field">Tên tài sản <span className="text-red-500">*</span></label>
-              <input
-                required
-                value={approveForm.name}
-                onChange={(e) => setApproveForm({ ...approveForm, name: e.target.value })}
-                className="input-field"
-              />
-            </div>
-            <div>
-              <label className="label-field">Loại tài sản <span className="text-red-500">*</span></label>
-              <select
-                required
-                value={approveForm.assetTypeId}
-                onChange={(e) => handleTypeChange(e.target.value)}
-                className="input-field"
-              >
-                {meta.assetTypes.map((t: any) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label-field">Serial Number</label>
-              <input
-                value={approveForm.serialNumber}
-                onChange={(e) => setApproveForm({ ...approveForm, serialNumber: e.target.value })}
-                className="input-field font-mono"
-              />
-            </div>
-            <div>
-              <label className="label-field">Phòng ban sử dụng</label>
-              <select
-                value={approveForm.usingDepartmentId}
-                onChange={(e) => setApproveForm({ ...approveForm, usingDepartmentId: e.target.value })}
-                className="input-field"
-              >
-                <option value="">-- Kho / Chưa phân bổ --</option>
-                {meta.departments.map((d: any) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label-field">Người sử dụng</label>
-              <input
-                value={approveForm.assignedUserName}
-                onChange={(e) => setApproveForm({ ...approveForm, assignedUserName: e.target.value })}
-                className="input-field"
-                placeholder="Họ và tên người tiếp nhận"
-              />
-            </div>
-            <div>
-              <label className="label-field">Vị trí đặt thiết bị</label>
-              <select
-                value={approveForm.locationId}
-                onChange={(e) => setApproveForm({ ...approveForm, locationId: e.target.value })}
-                className="input-field"
-              >
-                <option value="">-- Chọn vị trí --</option>
-                {meta.locations.map((l: any) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Purchase Info */}
-          <div className="pt-3 border-t border-line">
-            <div className="text-xs font-semibold text-ink-primary mb-3">Thông tin mua sắm & bảo hành</div>
-            <div className="grid sm:grid-cols-3 gap-3">
-              <div>
-                <label className="label-field">Nhà cung cấp</label>
-                <select
-                  value={approveForm.supplierId}
-                  onChange={(e) => setApproveForm({ ...approveForm, supplierId: e.target.value })}
-                  className="input-field"
-                >
-                  <option value="">-- Chọn NCC --</option>
-                  {meta.suppliers.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label-field">Giá mua (VND)</label>
-                <input
-                  type="number"
-                  value={approveForm.purchasePrice}
-                  onChange={(e) => setApproveForm({ ...approveForm, purchasePrice: e.target.value })}
-                  className="input-field"
-                  placeholder="Nhập giá mua"
-                />
-              </div>
-              <div>
-                <label className="label-field">Số hợp đồng / Hóa đơn</label>
-                <input
-                  value={approveForm.invoiceNumber}
-                  onChange={(e) => setApproveForm({ ...approveForm, invoiceNumber: e.target.value })}
-                  className="input-field"
-                  placeholder="Nhập số hợp đồng hoặc hóa đơn"
-                />
-              </div>
-              <div>
-                <label className="label-field">Ngày mua</label>
-                <input
-                  type="date"
-                  value={approveForm.purchaseDate}
-                  onChange={(e) => setApproveForm({ ...approveForm, purchaseDate: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="label-field">Bắt đầu bảo hành</label>
-                <input
-                  type="date"
-                  value={approveForm.warrantyStartDate}
-                  onChange={(e) => setApproveForm({ ...approveForm, warrantyStartDate: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-              <div>
-                <label className="label-field">Kết thúc bảo hành</label>
-                <input
-                  type="date"
-                  value={approveForm.warrantyEndDate}
-                  onChange={(e) => setApproveForm({ ...approveForm, warrantyEndDate: e.target.value })}
-                  className="input-field"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-3 border-t border-line">
-            <button type="button" onClick={() => setApproveTarget(null)} className="btn-secondary">
-              Hủy
-            </button>
-            <button type="submit" className="btn-primary">
-              <CheckCircle className="w-4 h-4" /> Phê duyệt & Ghi nhận tài sản
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Add Network Modal */}
       <Modal open={netModalOpen} onClose={() => setNetModalOpen(false)} title="Khai báo dải mạng LAN Discovery" maxWidth="max-w-lg">

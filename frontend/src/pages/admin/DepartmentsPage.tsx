@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { PageHeader, Modal } from '../../components/UiPrimitives';
@@ -9,6 +9,7 @@ export const DepartmentsPage: React.FC = () => {
   const [items, setItems] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ code: '', name: '', description: '' });
   const [msg, setMsg] = useState('');
 
@@ -21,13 +22,31 @@ export const DepartmentsPage: React.FC = () => {
     load();
   }, []);
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ code: '', name: '', description: '' });
+    setOpen(true);
+  };
+
+  const openEdit = (d: any) => {
+    setEditing(d);
+    setForm({ code: d.code || '', name: d.name || '', description: d.description || '' });
+    setOpen(true);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');
-    await api.post('/admin/departments', form);
+    if (editing) {
+      await api.patch(`/admin/departments/${editing.id}`, form);
+      setMsg(`Đã cập nhật phòng ban "${form.name.trim()}".`);
+    } else {
+      await api.post('/admin/departments', form);
+      setMsg(`Đã thêm phòng ban "${form.name.trim()}".`);
+    }
     setForm({ code: '', name: '', description: '' });
+    setEditing(null);
     setOpen(false);
-    setMsg('Đã thêm phòng ban mới.');
     load();
   };
 
@@ -48,10 +67,10 @@ export const DepartmentsPage: React.FC = () => {
     <div className="space-y-5">
       <PageHeader
         title="Danh mục Phòng ban"
-        subtitle="Quản lý cơ cấu phòng ban sử dụng và quản lý tài sản trong công ty."
+        subtitle="Quản lý cơ cấu phòng ban sử dụng, quản lý tài sản và liên kết người dùng theo phòng ban."
         actions={
           can('admin.catalogs') && (
-            <button onClick={() => setOpen(true)} className="btn-primary">
+            <button onClick={openCreate} className="btn-primary">
               <Plus className="w-4 h-4" /> Thêm phòng ban
             </button>
           )
@@ -80,25 +99,34 @@ export const DepartmentsPage: React.FC = () => {
                 <th className="th-cell w-12 text-center">STT</th>
                 <th className="th-cell">Mã phòng ban</th>
                 <th className="th-cell">Tên phòng ban</th>
+                <th className="th-cell text-right">Số người dùng</th>
+                <th className="th-cell text-right">Số tài sản</th>
                 <th className="th-cell">Mô tả</th>
                 {can('admin.catalogs') && <th className="th-cell text-right">Thao tác</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="td-cell text-center text-ink-muted py-8">Chưa có dữ liệu phòng ban.</td></tr>
+                <tr><td colSpan={7} className="td-cell text-center text-ink-muted py-8">Chưa có dữ liệu phòng ban.</td></tr>
               ) : (
                 filtered.map((d, idx) => (
                   <tr key={d.id} className="hover:bg-slate-50/70">
                     <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
                     <td className="td-cell font-mono text-xs font-semibold text-brand">{d.code}</td>
                     <td className="td-cell font-medium">{d.name}</td>
+                    <td className="td-cell text-right font-mono text-xs tabular-nums">{d._count?.users ?? 0}</td>
+                    <td className="td-cell text-right font-mono text-xs tabular-nums">{d._count?.usingAssets ?? 0}</td>
                     <td className="td-cell text-xs text-ink-muted">{d.description || '—'}</td>
                     {can('admin.catalogs') && (
                       <td className="td-cell text-right">
-                        <button onClick={() => handleDelete(d)} className="btn-secondary text-red-600 px-2 py-1 text-xs" title="Ẩn phòng ban">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="inline-flex items-center gap-1.5">
+                          <button onClick={() => openEdit(d)} className="btn-secondary px-2 py-1 text-xs" title="Sửa phòng ban">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(d)} className="btn-secondary text-red-600 px-2 py-1 text-xs" title="Ẩn phòng ban">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     )}
                   </tr>
@@ -109,8 +137,8 @@ export const DepartmentsPage: React.FC = () => {
         </div>
       </div>
 
-      <Modal open={open} onClose={() => setOpen(false)} title="Thêm phòng ban mới" maxWidth="max-w-lg">
-        <form onSubmit={handleCreate} className="space-y-3.5">
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Chỉnh sửa phòng ban' : 'Thêm phòng ban mới'} maxWidth="max-w-lg">
+        <form onSubmit={handleSubmit} className="space-y-3.5">
           <div>
             <label className="label-field">Mã phòng ban <span className="text-red-500">*</span></label>
             <input required value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} className="input-field font-mono" placeholder="Nhập mã phòng ban" />
@@ -121,11 +149,11 @@ export const DepartmentsPage: React.FC = () => {
           </div>
           <div>
             <label className="label-field">Mô tả</label>
-            <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input-field" />
+            <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="input-field" placeholder="Nhập mô tả phòng ban" />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-line">
             <button type="button" onClick={() => setOpen(false)} className="btn-secondary">Hủy</button>
-            <button type="submit" className="btn-primary">Lưu phòng ban</button>
+            <button type="submit" className="btn-primary">{editing ? 'Lưu thay đổi' : 'Lưu phòng ban'}</button>
           </div>
         </form>
       </Modal>

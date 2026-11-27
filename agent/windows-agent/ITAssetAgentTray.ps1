@@ -15,6 +15,15 @@ $StatusPath = Join-Path $DataDir "status.json"
 $LogFile = Join-Path $DataDir "logs\agent.log"
 $AgentScript = Join-Path $InstallDir "ITAssetAgent.ps1"
 
+# Ensure single Tray instance per user session
+$createdNew = $false
+$mutex = New-Object System.Threading.Mutex($true, "Global\ITAssetAgentTraySingleInstance", [ref]$createdNew)
+if (-not $createdNew) {
+    exit 0
+}
+
+$script:StatusForm = $null
+
 function Read-AgentStatus {
     if (Test-Path $StatusPath) {
         try { return (Get-Content -Path $StatusPath -Raw -Encoding UTF8 | ConvertFrom-Json) } catch {}
@@ -22,33 +31,12 @@ function Read-AgentStatus {
     return $null
 }
 
-function Show-StatusDialog {
+function Format-StatusText {
     $st = Read-AgentStatus
     $cfg = $null
     if (Test-Path $ConfigPath) {
         try { $cfg = Get-Content -Path $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json } catch {}
     }
-
-    $form = New-Object System.Windows.Forms.Form
-    $form.Text = "IT Asset Management Agent"
-    $form.Size = New-Object System.Drawing.Size(440, 310)
-    $form.StartPosition = "CenterScreen"
-    $form.FormBorderStyle = "FixedDialog"
-    $form.MaximizeBox = $false
-    $form.MinimizeBox = $false
-    $form.BackColor = [System.Drawing.Color]::White
-
-    $fontTitle = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
-    $fontBody = New-Object System.Drawing.Font("Segoe UI", 9)
-
-    $lblHeader = New-Object System.Windows.Forms.Label
-    $lblHeader.Text = "IT Asset Management - Windows Agent"
-    $lblHeader.Font = $fontTitle
-    $lblHeader.ForeColor = [System.Drawing.Color]::FromArgb(0, 110, 150)
-    $lblHeader.Location = New-Object System.Drawing.Point(16, 14)
-    $lblHeader.Size = New-Object System.Drawing.Size(400, 24)
-    $form.Controls.Add($lblHeader)
-
     $statusText = if ($st -and $st.status -eq "ONLINE") { "Truc tuyen (ONLINE)" } elseif ($st -and $st.status -eq "ERROR") { "Loi ket noi (ERROR)" } else { "Chua dong bo" }
     $infoLines = @(
         "May tram      : $($env:COMPUTERNAME)",
@@ -61,6 +49,35 @@ function Show-StatusDialog {
     if ($st -and $st.lastError) {
         $infoLines += "Loi gan nhat  : $($st.lastError)"
     }
+    return ($infoLines -join "`r`n")
+}
+
+function Show-StatusDialog {
+    if ($null -ne $script:StatusForm -and -not $script:StatusForm.IsDisposed) {
+        $script:StatusForm.Activate()
+        return
+    }
+
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = "IT Asset Management Agent"
+    $form.Size = New-Object System.Drawing.Size(440, 310)
+    $form.StartPosition = "CenterScreen"
+    $form.FormBorderStyle = "FixedDialog"
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.BackColor = [System.Drawing.Color]::White
+    $script:StatusForm = $form
+
+    $fontTitle = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
+    $fontBody = New-Object System.Drawing.Font("Segoe UI", 9)
+
+    $lblHeader = New-Object System.Windows.Forms.Label
+    $lblHeader.Text = "IT Asset Management - Windows Agent"
+    $lblHeader.Font = $fontTitle
+    $lblHeader.ForeColor = [System.Drawing.Color]::FromArgb(0, 110, 150)
+    $lblHeader.Location = New-Object System.Drawing.Point(16, 14)
+    $lblHeader.Size = New-Object System.Drawing.Size(400, 24)
+    $form.Controls.Add($lblHeader)
 
     $txtInfo = New-Object System.Windows.Forms.TextBox
     $txtInfo.Multiline = $true
@@ -70,7 +87,7 @@ function Show-StatusDialog {
     $txtInfo.Font = New-Object System.Drawing.Font("Consolas", 9)
     $txtInfo.Location = New-Object System.Drawing.Point(16, 48)
     $txtInfo.Size = New-Object System.Drawing.Size(392, 165)
-    $txtInfo.Text = ($infoLines -join "`r`n")
+    $txtInfo.Text = Format-StatusText
     $form.Controls.Add($txtInfo)
 
     $btnSync = New-Object System.Windows.Forms.Button
@@ -84,9 +101,16 @@ function Show-StatusDialog {
     $btnSync.Add_Click({
         $btnSync.Enabled = $false
         $btnSync.Text = "Dang dong bo..."
-        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentScript`" -Mode Once -ConfigPath `"$ConfigPath`"" -Wait
-        $form.Close()
-        Show-StatusDialog
+        $form.Refresh()
+        [System.Windows.Forms.Application]::DoEvents()
+        try {
+            Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentScript`" -Mode Once -ConfigPath `"$ConfigPath`"" -Wait
+        } finally {
+            $txtInfo.Text = Format-StatusText
+            $btnSync.Text = "Dong bo ngay"
+            $btnSync.Enabled = $true
+            $form.Refresh()
+        }
     })
     $form.Controls.Add($btnSync)
 
@@ -110,6 +134,10 @@ function Show-StatusDialog {
         else { [System.Windows.Forms.MessageBox]::Show("Chua co file nhat ky.", "IT Asset Agent") }
     })
     $form.Controls.Add($btnLog)
+
+    $form.Add_FormClosed({
+        $script:StatusForm = $null
+    })
 
     [void]$form.ShowDialog()
 }

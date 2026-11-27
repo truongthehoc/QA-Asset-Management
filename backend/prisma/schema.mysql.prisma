@@ -1,4 +1,4 @@
-﻿// Prisma Schema - IT Asset Management System (Production MySQL 8.0 mode)
+// Prisma Schema - IT Asset Management System (Production MySQL 8.0 mode)
 // For Production MySQL 8.0 deployment, see prisma/schema.mysql.prisma (identical models/fields)
 
 generator client {

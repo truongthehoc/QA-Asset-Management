@@ -29,6 +29,9 @@ export const AlertsPage: React.FC = () => {
 
   useEffect(() => {
     load();
+    const onRealtime = () => load();
+    window.addEventListener('itam:realtime-update', onRealtime);
+    return () => window.removeEventListener('itam:realtime-update', onRealtime);
   }, [catFilter, sevFilter]);
 
   const handleVerifyChange = async (change: any, decision: 'APPROVED' | 'REJECTED') => {

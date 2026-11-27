@@ -1,4 +1,4 @@
-// Prisma Schema - IT Asset Management System (Local Dev SQLite mode)
+// Prisma Schema - IT Asset Management System (Production MySQL 8.0 mode)
 // For Production MySQL 8.0 deployment, see prisma/schema.mysql.prisma (identical models/fields)
 
 generator client {
@@ -6,12 +6,12 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
 // ============================================================================
-// 10.1 NHÓM DANH MỤC VÀ NGƯỜI DÙNG
+// 10.1 NHÃ“M DANH Má»¤C VÃ€ NGÆ¯á»œI DÃ™NG
 // ============================================================================
 
 model Department {
@@ -184,7 +184,7 @@ model UserRole {
 }
 
 // ============================================================================
-// 10.2 NHÓM TÀI SẢN
+// 10.2 NHÃ“M TÃ€I Sáº¢N
 // ============================================================================
 
 model AssetCodeSequence {
@@ -216,7 +216,7 @@ model Asset {
   handoverDate          DateTime?
   handoverBy            String?
   receivedBy            String?
-  officialSpecsJson     String?   // JSON string of IT-confirmed baseline hardware/OS summary
+  officialSpecsJson     String? @db.LongText   // JSON string of IT-confirmed baseline hardware/OS summary
   notes                 String?
   approvedById          String?
   approvedAt            DateTime?
@@ -437,7 +437,7 @@ model InventoryItem {
 }
 
 // ============================================================================
-// 10.3 NHÓM AGENT VÀ THIẾT BỊ
+// 10.3 NHÃ“M AGENT VÃ€ THIáº¾T Bá»Š
 // ============================================================================
 
 model EnrollmentToken {
@@ -555,7 +555,7 @@ model DeviceSnapshot {
   biosSerial       String?
   totalRamGb       Float?
   totalDiskGb      Float?
-  rawPayloadJson   String?
+  rawPayloadJson   String? @db.LongText
   createdAt        DateTime  @default(now())
 
   agent            DeviceAgent            @relation(fields: [agentId], references: [id], onDelete: Cascade)
@@ -685,7 +685,7 @@ model DeviceBaseline {
   snapshotId    String
   version       Int            @default(1)
   isActive      Boolean        @default(true)
-  baselineJson  String         // Structured canonical baseline snapshot for diffing
+  baselineJson  String @db.LongText         // Structured canonical baseline snapshot for diffing
   confirmedById String?
   confirmedAt   DateTime       @default(now())
   notes         String?
@@ -737,7 +737,7 @@ model DeviceHeartbeat {
 }
 
 // ============================================================================
-// 10.4 NHÓM QUÉT MẠNG, CẢNH BÁO VÀ QUẢN TRỊ
+// 10.4 NHÃ“M QUÃ‰T Máº NG, Cáº¢NH BÃO VÃ€ QUáº¢N TRá»Š
 // ============================================================================
 
 model ScanNetwork {
@@ -885,3 +885,4 @@ model AuditLog {
 
   user       User?    @relation(fields: [userId], references: [id])
 }
+

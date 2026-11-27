@@ -49,8 +49,12 @@ export class CatalogsService {
 
   async getAllMeta() {
     await Promise.all([this.ensureDefaultAssetStatuses(), this.ensureDefaultSystemSettings()]);
-    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions, lanScanSetting] = await Promise.all([
-      this.prisma.department.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
+    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions, users, lanScanSetting] = await Promise.all([
+      this.prisma.department.findMany({
+        where: { isActive: true },
+        include: { _count: { select: { users: true, usingAssets: true } } },
+        orderBy: { name: 'asc' },
+      }),
       this.prisma.location.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
       this.prisma.assetCategory.findMany({
         where: { isActive: true },
@@ -68,6 +72,18 @@ export class CatalogsService {
         orderBy: { code: 'asc' },
       }),
       this.prisma.permission.findMany({ orderBy: [{ module: 'asc' }, { code: 'asc' }] }),
+      this.prisma.user.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          username: true,
+          fullName: true,
+          email: true,
+          title: true,
+          departmentId: true,
+        },
+        orderBy: { fullName: 'asc' },
+      }),
       this.prisma.systemSetting.findUnique({ where: { key: 'discovery.lan_scan_enabled' } }),
     ]);
     return {
@@ -79,6 +95,7 @@ export class CatalogsService {
       suppliers,
       roles,
       permissions,
+      users,
       features: {
         lanScanEnabled: lanScanSetting?.value === 'true',
       },
@@ -221,7 +238,18 @@ export class CatalogsService {
 
   // Departments
   createDepartment(data: any) {
-    return this.prisma.department.create({ data: { code: data.code.trim(), name: data.name.trim(), description: data.description || null } });
+    return this.prisma.department.create({ data: { code: data.code.trim().toUpperCase(), name: data.name.trim(), description: data.description || null } });
+  }
+  async updateDepartment(id: string, data: any) {
+    const existing = await this.prisma.department.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy phòng ban.');
+    const code = (data.code ?? existing.code).trim().toUpperCase();
+    const name = (data.name ?? existing.name).trim();
+    if (!code || !name) throw new BadRequestException('Mã và tên phòng ban không được để trống.');
+    return this.prisma.department.update({
+      where: { id },
+      data: { code, name, description: data.description !== undefined ? data.description?.trim() || null : existing.description },
+    });
   }
   deleteDepartment(id: string) {
     return this.prisma.department.update({ where: { id }, data: { isActive: false } });
@@ -510,6 +538,29 @@ export class CatalogsService {
     return user;
   }
 
+  async updateUser(id: string, data: any, actor: AuthUser) {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy người dùng.');
+    const updated = await this.prisma.user.update({
+      where: { id },
+      data: {
+        fullName: data.fullName !== undefined ? String(data.fullName).trim() : existing.fullName,
+        email: data.email !== undefined ? String(data.email).trim() : existing.email,
+        title: data.title !== undefined ? (data.title?.trim() || null) : existing.title,
+        departmentId: data.departmentId !== undefined ? (data.departmentId || null) : existing.departmentId,
+      },
+    });
+    await this.auditService.log({
+      userId: actor.id,
+      actorName: actor.fullName,
+      action: 'USER_UPDATED',
+      entityType: 'User',
+      entityId: id,
+      newValue: `${updated.username} (${updated.fullName})`,
+    });
+    return updated;
+  }
+
   async toggleUserActive(id: string, isActive: boolean, actor: AuthUser) {
     const updated = await this.prisma.user.update({ where: { id }, data: { isActive } });
     await this.auditService.log({
@@ -569,6 +620,12 @@ export class CatalogsController {
   @RequirePermissions('catalogs.create')
   createDepartment(@Body() body: any) {
     return this.service.createDepartment(body);
+  }
+
+  @Patch('departments/:id')
+  @RequirePermissions('catalogs.update')
+  updateDepartment(@Param('id') id: string, @Body() body: any) {
+    return this.service.updateDepartment(id, body);
   }
 
   @Delete('departments/:id')
@@ -676,6 +733,12 @@ export class CatalogsController {
   @RequirePermissions('users.create')
   createUser(@Body() body: any, @CurrentUser() user: AuthUser) {
     return this.service.createUser(body, user);
+  }
+
+  @Patch('users/:id')
+  @RequirePermissions('users.update')
+  updateUser(@Param('id') id: string, @Body() body: any, @CurrentUser() user: AuthUser) {
+    return this.service.updateUser(id, body, user);
   }
 
   @Patch('users/:id/active')

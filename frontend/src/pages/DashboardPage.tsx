@@ -35,16 +35,21 @@ export const DashboardPage: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
-    setLoading(true);
+  const load = (silent = false) => {
+    if (!silent) setLoading(true);
     api
       .get('/dashboard')
       .then((res) => setData(res.data))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!silent) setLoading(false);
+      });
   };
 
   useEffect(() => {
     load();
+    const onRealtime = () => load(true);
+    window.addEventListener('itam:realtime-update', onRealtime);
+    return () => window.removeEventListener('itam:realtime-update', onRealtime);
   }, []);
 
   if (loading && !data) {
@@ -71,7 +76,7 @@ export const DashboardPage: React.FC = () => {
         title="Tổng quan hệ thống tài sản CNTT"
         subtitle="Theo dõi tập trung vòng đời tài sản, trạng thái Windows Agent và sai lệch cấu hình theo thời gian thực."
         actions={
-          <button onClick={load} className="btn-secondary">
+          <button onClick={() => load()} className="btn-secondary">
             <RefreshCw className="w-4 h-4" />
             Làm mới
           </button>

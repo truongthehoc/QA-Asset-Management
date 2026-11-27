@@ -293,7 +293,7 @@ export class DiscoveryService {
         data: {
           assetCode,
           codeMode,
-          name: body.name || `${disc.manufacturer || ''} ${disc.model || disc.hostname || assetCode}`.trim(),
+          name: (body.name || '').trim() || (body.hostname || '').trim() || disc.hostname || assetCode,
           categoryId: body.categoryId || assetType.categoryId,
           assetTypeId: assetType.id,
           status: body.status || (body.usingDepartmentId ? 'IN_USE' : 'UNALLOCATED'),
@@ -301,7 +301,7 @@ export class DiscoveryService {
           qrCodeValue: `ITAM:${assetCode}`,
           manufacturer: body.manufacturer || disc.manufacturer || disc.macVendor || null,
           model: body.model || disc.model || null,
-          hostname: disc.hostname || null,
+          hostname: (body.hostname || '').trim() || disc.hostname || null,
           managingDepartmentId: body.managingDepartmentId || null,
           usingDepartmentId: body.usingDepartmentId || null,
           assignedUserId: body.assignedUserId || null,

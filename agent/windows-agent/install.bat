@@ -28,7 +28,12 @@ if exist "%SRC%config.json" (
     copy /Y "%SRC%config.json" "%DATA_DIR%\config.json" >nul
 )
 
-echo [1/3] Dang ky dich vu chay ngam (Scheduled Task - SYSTEM)...
+echo [1/3] Dang dong bo lan dau (Enroll + Snapshot)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Stop-ScheduledTask -TaskName 'ITAssetManagementAgent' -ErrorAction SilentlyContinue"
+if exist "%DATA_DIR%\state.json" del /F /Q "%DATA_DIR%\state.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\ITAssetAgent.ps1" -Mode Once -ConfigPath "%DATA_DIR%\config.json"
+
+echo [2/3] Dang ky dich vu chay ngam (Scheduled Task - SYSTEM)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\Program Files\ITAssetAgent\ITAssetAgent.ps1\" -Mode Daemon -ConfigPath \"C:\ProgramData\ITAssetAgent\config.json\"';" ^
   "$trigger = New-ScheduledTaskTrigger -AtStartup;" ^
@@ -37,7 +42,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "Register-ScheduledTask -TaskName 'ITAssetManagementAgent' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null;" ^
   "Start-ScheduledTask -TaskName 'ITAssetManagementAgent'"
 
-echo [2/3] Dang ky bieu tuong khay he thong (System Tray)...
+echo [3/3] Dang ky bieu tuong khay he thong (System Tray)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\Program Files\ITAssetAgent\ITAssetAgentTray.ps1\"';" ^
   "$trigger = New-ScheduledTaskTrigger -AtLogOn;" ^
@@ -45,9 +50,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero);" ^
   "Register-ScheduledTask -TaskName 'ITAssetManagementAgentTray' -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null;" ^
   "Start-Process powershell.exe -ArgumentList '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"C:\Program Files\ITAssetAgent\ITAssetAgentTray.ps1\"'"
-
-echo [3/3] Dang chay dong bo lan dau...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\ITAssetAgent.ps1" -Mode Once -ConfigPath "%DATA_DIR%\config.json"
 
 echo.
 echo ============================================================

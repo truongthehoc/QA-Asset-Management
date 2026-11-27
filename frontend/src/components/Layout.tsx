@@ -60,6 +60,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   );
   const [quickSearch, setQuickSearch] = useState('');
   const [badges, setBadges] = useState({ pendingApproval: 0, unresolvedAlerts: 0 });
+  const [toasts, setToasts] = useState<Array<{ id: string; title: string; desc: string; to: string; kind: 'discovery' | 'alert' }>>([]);
+  const prevSnapshotRef = useRef<{
+    initialized: boolean;
+    pendingApproval: number;
+    unresolvedAlerts: number;
+    totalAssets: number;
+    agentsOnline: number;
+  }>({
+    initialized: false,
+    pendingApproval: 0,
+    unresolvedAlerts: 0,
+    totalAssets: 0,
+    agentsOnline: 0,
+  });
 
   // Account Dropdown & Modals
   const [menuOpen, setMenuOpen] = useState(false);
@@ -77,16 +91,100 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   }, [location.pathname]);
 
   useEffect(() => {
-    api
-      .get('/dashboard')
-      .then((res) => {
+    let active = true;
+
+    const pushToast = (item: { title: string; desc: string; to: string; kind: 'discovery' | 'alert' }) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      setToasts((prev) => [...prev.slice(-2), { ...item, id }]);
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 8000);
+    };
+
+    const pollStatus = async () => {
+      if (!active || document.visibilityState === 'hidden') return;
+      try {
+        const res = await api.get('/dashboard');
+        if (!active) return;
+        const kpis = res.data?.kpis || {};
+        const nextPending = Number(kpis.pendingApproval || 0);
+        const nextAlerts = Number(kpis.unresolvedConfigAlerts || 0);
+        const nextAssets = Number(kpis.totalAssets || 0);
+        const nextAgentsOnline = Number(kpis.agentsOnline || 0);
+
         setBadges({
-          pendingApproval: res.data?.kpis?.pendingApproval || 0,
-          unresolvedAlerts: res.data?.kpis?.unresolvedConfigAlerts || 0,
+          pendingApproval: nextPending,
+          unresolvedAlerts: nextAlerts,
         });
-      })
-      .catch(() => {});
-  }, []);
+
+        const prev = prevSnapshotRef.current;
+        if (prev.initialized) {
+          const pendingDelta = nextPending - prev.pendingApproval;
+          const alertsDelta = nextAlerts - prev.unresolvedAlerts;
+          const anyChanged =
+            pendingDelta !== 0 ||
+            alertsDelta !== 0 ||
+            nextAssets !== prev.totalAssets ||
+            nextAgentsOnline !== prev.agentsOnline;
+
+          if (pendingDelta > 0) {
+            pushToast({
+              kind: 'discovery',
+              title: `Phát hiện +${pendingDelta} thiết bị mới chờ duyệt`,
+              desc: `Hiện có ${nextPending} thiết bị đang chờ IT kiểm duyệt.`,
+              to: '/discovery',
+            });
+          }
+          if (alertsDelta > 0) {
+            pushToast({
+              kind: 'alert',
+              title: `Có +${alertsDelta} cảnh báo cấu hình mới`,
+              desc: `Hiện có ${nextAlerts} cảnh báo / thay đổi chưa xác minh.`,
+              to: '/alerts',
+            });
+          }
+          if (anyChanged) {
+            window.dispatchEvent(
+              new CustomEvent('itam:realtime-update', {
+                detail: {
+                  pendingApproval: nextPending,
+                  unresolvedAlerts: nextAlerts,
+                  totalAssets: nextAssets,
+                  agentsOnline: nextAgentsOnline,
+                },
+              }),
+            );
+          }
+        }
+
+        prevSnapshotRef.current = {
+          initialized: true,
+          pendingApproval: nextPending,
+          unresolvedAlerts: nextAlerts,
+          totalAssets: nextAssets,
+          agentsOnline: nextAgentsOnline,
+        };
+      } catch {
+        // ignore transient network errors
+      }
+    };
+
+    pollStatus();
+    const timer = window.setInterval(pollStatus, 5000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') pollStatus();
+    };
+    const onManualRefresh = () => pollStatus();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('itam:refresh-badges', onManualRefresh);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('itam:refresh-badges', onManualRefresh);
+    };
+  }, [location.pathname]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -126,16 +224,17 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     { to: '/reports', label: 'Báo cáo', icon: BarChart3, show: can('reports.read') },
   ].filter((item) => item.show);
 
-  // Separate dedicated routes for Danh mục & Quản trị (SRS Section 14.10)
+  // Separate dedicated routes for Danh mục & Quản trị — ordered by setup workflow:
+  // 1) Tổ chức & Nhân sự -> 2) Danh mục Tài sản & Mua sắm -> 3) Cấu hình, Agent & Nhật ký
   const adminSubItems = [
     { to: '/admin/departments', label: 'Phòng ban', icon: Building2, show: can('admin.catalogs') },
+    { to: '/admin/locations', label: 'Vị trí', icon: MapPin, show: can('admin.catalogs') },
+    { to: '/admin/roles', label: 'Phân quyền', icon: Shield, show: can('admin.users') || can('admin.settings') },
+    { to: '/admin/users', label: 'Người dùng', icon: Users, show: can('admin.users') },
     { to: '/admin/asset-categories', label: 'Nhóm tài sản', icon: Layers, show: can('admin.catalogs') },
     { to: '/admin/asset-types', label: 'Loại tài sản', icon: Tags, show: can('admin.catalogs') },
     { to: '/admin/asset-statuses', label: 'Trạng thái tài sản', icon: CircleDot, show: can('admin.catalogs') },
-    { to: '/admin/locations', label: 'Vị trí', icon: MapPin, show: can('admin.catalogs') },
     { to: '/admin/suppliers', label: 'Nhà cung cấp', icon: Truck, show: can('admin.catalogs') },
-    { to: '/admin/users', label: 'Người dùng', icon: Users, show: can('admin.users') },
-    { to: '/admin/roles', label: 'Phân quyền', icon: Shield, show: can('admin.users') || can('admin.settings') },
     { to: '/admin/settings', label: 'Cấu hình hệ thống', icon: Sliders, show: can('admin.settings') },
     { to: '/admin/agent-management', label: 'Quản lý phiên bản Agent', icon: Cpu, show: can('admin.settings') },
     { to: '/admin/audit-logs', label: 'Nhật ký hệ thống', icon: FileClock, show: can('admin.audit') },
@@ -488,6 +587,50 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
         <main className="flex-1 p-4 lg:p-6 w-full transition-all duration-200">{children}</main>
       </div>
+
+      {/* Floating Live Notifications Toast */}
+      {toasts.length > 0 && (
+        <div className="no-print fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+          {toasts.map((t) => (
+            <div
+              key={t.id}
+              className="pointer-events-auto bg-white border border-sky-200 rounded-lg shadow-lg p-3.5 flex items-start gap-3 animate-fade-in"
+            >
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                  t.kind === 'discovery' ? 'bg-sky-100 text-brand' : 'bg-amber-100 text-amber-700'
+                }`}
+              >
+                {t.kind === 'discovery' ? <Radar className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold text-ink-primary">{t.title}</div>
+                <div className="text-[11px] text-ink-secondary mt-0.5">{t.desc}</div>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setToasts((prev) => prev.filter((x) => x.id !== t.id));
+                      navigate(t.to);
+                    }}
+                    className="text-xs font-semibold text-brand hover:underline"
+                  >
+                    Xem ngay →
+                  </button>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+                className="p-0.5 text-slate-400 hover:text-slate-600 rounded"
+                aria-label="Đóng thông báo"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Modal: Thông tin tài khoản */}
       <Modal
