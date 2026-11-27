@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AssetStatusProvider } from './contexts/AssetStatusContext';
+import { BrandingProvider } from './contexts/BrandingContext';
 import { Layout } from './components/Layout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -42,6 +43,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 export function App() {
   return (
+    <BrandingProvider>
     <AuthProvider>
       <AssetStatusProvider>
       <BrowserRouter>
@@ -82,6 +84,7 @@ export function App() {
       </BrowserRouter>
       </AssetStatusProvider>
     </AuthProvider>
+    </BrandingProvider>
   );
 }
 

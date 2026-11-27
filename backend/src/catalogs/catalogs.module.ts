@@ -984,6 +984,18 @@ export class CatalogsService {
     return this.listSettings();
   }
 
+  async getPublicBranding() {
+    const rows = await this.prisma.systemSetting.findMany({
+      where: { key: { in: ['org.name', 'org.logo_url'] } },
+    });
+    const map: Record<string, string> = {};
+    for (const r of rows) map[r.key] = r.value;
+    return {
+      name: map['org.name'] || '',
+      logoUrl: map['org.logo_url'] || '',
+    };
+  }
+
   saveOrgLogo(file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Chưa chọn tệp ảnh logo.');
     const ext = path.extname(file.originalname || '').toLowerCase();
@@ -1234,12 +1246,17 @@ export class CatalogsController {
   }
 }
 
-@ApiTags('Public Organization Logo')
-@Controller('api/v1/public/org-logo')
+@ApiTags('Public Organization Branding & Logo')
+@Controller('api/v1/public')
 export class PublicOrgLogoController {
   constructor(private readonly service: CatalogsService) {}
 
-  @Get(':filename')
+  @Get('branding')
+  getBranding() {
+    return this.service.getPublicBranding();
+  }
+
+  @Get('org-logo/:filename')
   serveOrgLogo(@Param('filename') filename: string, @Res() res: Response) {
     const fullPath = this.service.getOrgLogoPath(filename);
     res.setHeader('Cache-Control', 'public, max-age=86400');

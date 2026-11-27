@@ -37,6 +37,7 @@ import {
   FileClock,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranding } from '../contexts/BrandingContext';
 import { api } from '../api/client';
 import { Modal, Badge } from './UiPrimitives';
 
@@ -49,6 +50,7 @@ function getInitials(name?: string | null): string {
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout, can } = useAuth();
+  const branding = useBranding();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -341,12 +343,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           }`}
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-md bg-white/15 border border-white/20 flex items-center justify-center text-white shrink-0">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
+            {branding.logoUrl ? (
+              <div className="w-8 h-8 rounded-md bg-white p-0.5 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
+                <img src={branding.logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
+              </div>
+            ) : (
+              <div className="w-8 h-8 rounded-md bg-white/15 border border-white/20 flex items-center justify-center text-white shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+            )}
             {!collapsed && (
               <div className="min-w-0">
-                <div className="text-sm font-normal text-white leading-tight truncate">IT Asset Mgmt</div>
+                <div className="text-sm font-normal text-white leading-tight truncate">
+                  {branding.name || 'IT Asset Mgmt'}
+                </div>
                 <div className="text-[11px] font-normal text-white/75 truncate">Quản lý tài sản CNTT</div>
               </div>
             )}

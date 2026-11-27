@@ -14,9 +14,11 @@ import {
   Server,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranding } from '../contexts/BrandingContext';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
+  const branding = useBranding();
   const navigate = useNavigate();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -59,10 +61,10 @@ export const LoginPage: React.FC = () => {
         className="pointer-events-none absolute -bottom-32 -right-24 w-[28rem] h-[28rem] rounded-full bg-cyan-500/15 blur-3xl"
       />
 
-      {/* Main Split Card */}
-      <div className="relative z-10 w-full max-w-[920px] grid md:grid-cols-12 bg-white rounded-2xl border border-sky-200/80 shadow-[0_24px_60px_-20px_rgba(0,90,125,0.22)] overflow-hidden">
-        {/* Left Visual & Brand Panel */}
-        <div className="relative md:col-span-5 bg-gradient-to-br from-[#004f6d] via-[#006E96] to-[#0086b3] text-white p-8 flex flex-col justify-between overflow-hidden">
+      {/* Main Split Card (Desktop) / Compact Single Card (Mobile) */}
+      <div className="relative z-10 w-full max-w-[400px] md:max-w-[920px] grid md:grid-cols-12 bg-white rounded-2xl border border-sky-200/80 shadow-[0_24px_60px_-20px_rgba(0,90,125,0.22)] overflow-hidden">
+        {/* Left Visual & Brand Panel — Desktop only */}
+        <div className="hidden md:flex relative md:col-span-5 bg-gradient-to-br from-[#004f6d] via-[#006E96] to-[#0086b3] text-white p-8 flex-col justify-between overflow-hidden">
           {/* IT Infrastructure SVG Circuit / Network Topology Motif */}
           <svg
             aria-hidden="true"
@@ -107,13 +109,21 @@ export const LoginPage: React.FC = () => {
 
           {/* Top Brand */}
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/25 backdrop-blur-sm flex items-center justify-center shadow-sm">
-                <ShieldCheck className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <div className="text-sm font-semibold tracking-wide text-white">IT Asset Mgmt</div>
-                <div className="text-[11px] text-white/75">Enterprise Asset Platform</div>
+            <div className="inline-flex items-center gap-3">
+              {branding.logoUrl ? (
+                <div className="w-11 h-11 rounded-xl bg-white p-1.5 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
+                  <img src={branding.logoUrl} alt="Logo đơn vị" className="max-h-full max-w-full object-contain" />
+                </div>
+              ) : (
+                <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/25 backdrop-blur-sm flex items-center justify-center shadow-sm shrink-0">
+                  <ShieldCheck className="w-5 h-5 text-white" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <div className="text-sm font-semibold tracking-wide text-white truncate">
+                  {branding.name || 'IT Asset Mgmt'}
+                </div>
+                <div className="text-[11px] text-white/75">Quản lý tài sản CNTT</div>
               </div>
             </div>
 
@@ -175,9 +185,27 @@ export const LoginPage: React.FC = () => {
         </div>
 
         {/* Right Login Form Panel */}
-        <div className="md:col-span-7 p-8 sm:p-10 flex flex-col justify-center bg-white">
+        <div className="md:col-span-7 p-6 sm:p-8 md:p-10 flex flex-col justify-center bg-white">
           <div className="max-w-md w-full mx-auto">
-            <div className="mb-7">
+            {/* Compact Mobile Logo & Title */}
+            <div className="md:hidden flex flex-col items-center text-center mb-6">
+              {branding.logoUrl ? (
+                <div className="h-14 w-28 mb-2.5 flex items-center justify-center">
+                  <img src={branding.logoUrl} alt="Logo đơn vị" className="max-h-full max-w-full object-contain" />
+                </div>
+              ) : (
+                <div className="w-12 h-12 rounded-xl bg-brand text-white flex items-center justify-center shadow-sm mb-2.5">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+              )}
+              <h1 className="text-lg font-bold text-ink-primary tracking-tight">
+                {branding.name || 'Quản lý tài sản CNTT'}
+              </h1>
+              <p className="text-xs text-ink-muted mt-0.5">Đăng nhập hệ thống</p>
+            </div>
+
+            {/* Desktop Heading */}
+            <div className="hidden md:block mb-7">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef8fc] text-[#006E96] border border-sky-200/80 text-[11px] font-semibold mb-3">
                 <Lock className="w-3 h-3" />
                 Xác thực người dùng
@@ -252,7 +280,7 @@ export const LoginPage: React.FC = () => {
               </button>
             </form>
 
-            <div className="mt-8 pt-5 border-t border-line flex items-center justify-between text-xs text-ink-muted">
+            <div className="hidden md:flex mt-8 pt-5 border-t border-line items-center justify-between text-xs text-ink-muted">
               <span>Bảo mật theo phân quyền RBAC</span>
               <span>Liên hệ bộ phận IT nếu cần cấp tài khoản</span>
             </div>

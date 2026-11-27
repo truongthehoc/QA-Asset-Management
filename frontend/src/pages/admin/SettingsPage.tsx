@@ -302,6 +302,7 @@ export const SettingsPage: React.FC = () => {
         text: `Đã lưu ${itemsToSave.length} tham số cấu hình hệ thống và ghi nhận Audit Log.`,
       });
       await load();
+      window.dispatchEvent(new Event('itam:branding-updated'));
     } catch (err: any) {
       setFeedback({
         type: 'err',
