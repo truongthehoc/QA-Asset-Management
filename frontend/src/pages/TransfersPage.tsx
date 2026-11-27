@@ -107,16 +107,16 @@ export const TransfersPage: React.FC = () => {
         }
       />
 
-      <div className="flex gap-1 border-b border-line">
+      <div className="flex gap-1 border-b border-line overflow-x-auto no-scrollbar">
         <button
           onClick={() => setTab('transfers')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 ${tab === 'transfers' ? 'border-brand text-brand' : 'border-transparent text-ink-secondary'}`}
+          className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap ${tab === 'transfers' ? 'border-brand text-brand' : 'border-transparent text-ink-secondary'}`}
         >
           Phiếu điều chuyển & Thu hồi ({transfers.length})
         </button>
         <button
           onClick={() => setTab('assignments')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 ${tab === 'assignments' ? 'border-brand text-brand' : 'border-transparent text-ink-secondary'}`}
+          className={`px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 whitespace-nowrap ${tab === 'assignments' ? 'border-brand text-brand' : 'border-transparent text-ink-secondary'}`}
         >
           Phiếu bàn giao & Lịch sử sử dụng ({assignments.length})
         </button>

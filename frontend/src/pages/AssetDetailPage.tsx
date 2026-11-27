@@ -890,6 +890,7 @@ export const AssetDetailPage: React.FC = () => {
       {/* TAB 7: LỊCH SỬ THAY ĐỔI CẤU HÌNH */}
       {tab === 'changes' && (
         <div className="panel overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>
@@ -940,6 +941,7 @@ export const AssetDetailPage: React.FC = () => {
               )}
             </tbody>
           </table>
+          </div>
           <TablePagination
             totalItems={changesPg.totalItems}
             page={changesPg.page}
@@ -963,6 +965,7 @@ export const AssetDetailPage: React.FC = () => {
                 </Link>
               )}
             </div>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
@@ -1030,6 +1033,7 @@ export const AssetDetailPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+            </div>
             <TablePagination
               totalItems={transfersPg.totalItems}
               page={transfersPg.page}
@@ -1041,6 +1045,7 @@ export const AssetDetailPage: React.FC = () => {
           </div>
           <div className="panel overflow-hidden">
             <div className="px-4 py-3 border-b border-line text-sm font-semibold">Lịch sử bàn giao ({asset.assignments?.length || 0})</div>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
@@ -1103,6 +1108,7 @@ export const AssetDetailPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+            </div>
             <TablePagination
               totalItems={assignmentsPg.totalItems}
               page={assignmentsPg.page}
@@ -1118,6 +1124,7 @@ export const AssetDetailPage: React.FC = () => {
       {/* TAB 9: BẢO TRÌ */}
       {tab === 'maintenance' && (
         <div className="panel overflow-hidden">
+          <div className="overflow-x-auto">
           <table className="w-full">
             <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Mã phiếu</th><th className="th-cell">Tình trạng / Nội dung</th><th className="th-cell">Đơn vị sửa chữa</th><th className="th-cell">Linh kiện</th><th className="th-cell">Chi phí</th><th className="th-cell">Trạng thái</th></tr></thead>
             <tbody>
@@ -1141,6 +1148,7 @@ export const AssetDetailPage: React.FC = () => {
               )}
             </tbody>
           </table>
+          </div>
           <TablePagination
             totalItems={maintenancesPg.totalItems}
             page={maintenancesPg.page}
@@ -1157,6 +1165,7 @@ export const AssetDetailPage: React.FC = () => {
         <div className="space-y-4">
           <div className="panel overflow-hidden">
             <div className="px-4 py-3 border-b border-line text-sm font-semibold">Lịch sử kiểm kê ({inventoryPg.totalItems})</div>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Đợt kiểm kê</th><th className="th-cell">Kết quả</th><th className="th-cell">Vị trí / Người dùng thực tế</th><th className="th-cell">Ghi chú</th><th className="th-cell">Người kiểm kê</th></tr></thead>
               <tbody>
@@ -1176,6 +1185,7 @@ export const AssetDetailPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+            </div>
             <TablePagination
               totalItems={inventoryPg.totalItems}
               page={inventoryPg.page}
@@ -1188,6 +1198,7 @@ export const AssetDetailPage: React.FC = () => {
 
           <div className="panel overflow-hidden">
             <div className="px-4 py-3 border-b border-line text-sm font-semibold">Nhật ký nghiệp vụ tài sản (Audit Log — {auditPg.totalItems})</div>
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Thời điểm</th><th className="th-cell">Thao tác</th><th className="th-cell">Trước → Sau</th><th className="th-cell">Lý do</th><th className="th-cell">Người thực hiện</th></tr></thead>
               <tbody>
@@ -1207,6 +1218,7 @@ export const AssetDetailPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+            </div>
             <TablePagination
               totalItems={auditPg.totalItems}
               page={auditPg.page}

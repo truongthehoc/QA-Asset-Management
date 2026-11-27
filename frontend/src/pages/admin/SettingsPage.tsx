@@ -537,7 +537,7 @@ export const SettingsPage: React.FC = () => {
                   <tr>
                     <th className="th-cell w-12 text-center">STT</th>
                     <th className="th-cell">Tham số cấu hình</th>
-                    <th className="th-cell w-[52%] min-w-[440px]">Giá trị thiết lập</th>
+                    <th className="th-cell sm:w-[52%] sm:min-w-[440px]">Giá trị thiết lập</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -623,7 +623,7 @@ export const SettingsPage: React.FC = () => {
                                 updateValue(s.key, ordered.join(','));
                               };
                               return (
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-[460px]">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:min-w-[460px]">
                                   {QR_FIELD_OPTIONS.map((opt) => {
                                     const checked = selectedFields.has(opt.key);
                                     return (
@@ -663,7 +663,7 @@ export const SettingsPage: React.FC = () => {
                                 updateValue(s.key, ordered.join(','));
                               };
                               return (
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-[460px]">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:min-w-[460px]">
                                   {DOC_HEADER_FIELD_OPTIONS.map((opt) => {
                                     const checked = selectedFields.has(opt.key);
                                     return (

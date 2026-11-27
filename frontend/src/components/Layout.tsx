@@ -555,11 +555,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="no-print h-14 bg-white border-b border-line px-4 lg:px-6 flex items-center justify-between gap-4 sticky top-0 z-30">
-          <div className="flex items-center gap-2.5 flex-1 max-w-md">
+        <header className="no-print h-14 bg-white border-b border-line px-3 sm:px-4 lg:px-6 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30">
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-0 max-w-md">
             <button
               onClick={() => setMobileOpen(true)}
-              className="lg:hidden p-1.5 text-ink-secondary hover:bg-slate-100 rounded"
+              className="lg:hidden p-2 -ml-1 text-ink-secondary hover:bg-slate-100 rounded-md shrink-0"
               aria-label="Mở menu"
             >
               <Menu className="w-5 h-5" />
@@ -567,20 +567,20 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             <button
               type="button"
               onClick={toggleCollapsed}
-              className="hidden lg:inline-flex p-1.5 text-ink-secondary hover:text-ink-primary hover:bg-slate-100 rounded transition-colors"
+              className="hidden lg:inline-flex p-1.5 text-ink-secondary hover:text-ink-primary hover:bg-slate-100 rounded transition-colors shrink-0"
               title={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
               aria-label={collapsed ? 'Mở rộng sidebar' : 'Thu gọn sidebar'}
             >
               {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
-            <form onSubmit={handleQuickSearch} className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <form onSubmit={handleQuickSearch} className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={quickSearch}
                 onChange={(e) => setQuickSearch(e.target.value)}
-                placeholder="Tìm nhanh mã tài sản, serial, hostname..."
-                className="w-full pl-9 pr-3 py-1.5 text-sm bg-slate-50 border border-line rounded-md focus:outline-none focus:bg-white focus:border-brand"
+                placeholder="Tìm mã TS, serial, hostname..."
+                className="w-full pl-8 sm:pl-9 pr-2.5 sm:pr-3 py-1.5 text-xs sm:text-sm bg-slate-50 border border-line rounded-md focus:outline-none focus:bg-white focus:border-brand"
               />
             </form>
           </div>
@@ -685,12 +685,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6 w-full transition-all duration-200">{children}</main>
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 w-full min-w-0 transition-all duration-200">{children}</main>
       </div>
 
       {/* Floating Live Notifications Toast */}
       {toasts.length > 0 && (
-        <div className="no-print fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-sm w-full pointer-events-none">
+        <div className="no-print fixed bottom-3 inset-x-3 sm:inset-x-auto sm:bottom-5 sm:right-5 z-50 flex flex-col gap-2.5 sm:max-w-sm sm:w-full pointer-events-none">
           {toasts.map((t) => (
             <div
               key={t.id}

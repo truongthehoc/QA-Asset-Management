@@ -84,9 +84,9 @@ export const HandoverReceipt: React.FC<{ data: ReceiptData }> = ({ data }) => {
   const deptSubtitle = data.docTemplate?.departmentSubtitle?.trim() || 'Phòng Công nghệ Thông tin';
 
   return (
-    <div className="receipt-printable bg-white border border-slate-300 rounded-xl p-6 sm:p-8 text-slate-900 shadow-xs max-w-4xl mx-auto print:border-0 print:shadow-none print:p-0 print:rounded-none">
+    <div className="receipt-printable bg-white border border-slate-300 rounded-xl p-4 sm:p-8 text-slate-900 shadow-xs max-w-4xl mx-auto print:border-0 print:shadow-none print:p-0 print:rounded-none">
       {/* Header: Organization & National Motto */}
-      <div className="grid grid-cols-2 gap-4 pb-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-4 pb-2">
         <div className="flex items-start gap-3">
           {headerFields.has('logo') && orgLogoUrl && (
             <img src={orgLogoUrl} alt="Logo đơn vị" className="h-14 w-20 object-contain shrink-0" />
@@ -164,7 +164,8 @@ export const HandoverReceipt: React.FC<{ data: ReceiptData }> = ({ data }) => {
       {/* Asset Table */}
       <div className="mb-5">
         <div className="text-xs font-bold uppercase text-slate-700 mb-2">I. Thông tin tài sản bàn giao</div>
-        <table className="w-full border-collapse border border-slate-300 text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[540px] border-collapse border border-slate-300 text-xs">
           <thead>
             <tr className="bg-slate-100 print:bg-slate-100">
               <th className="border border-slate-300 px-2.5 py-2 text-center w-10 font-semibold">STT</th>
@@ -186,6 +187,7 @@ export const HandoverReceipt: React.FC<{ data: ReceiptData }> = ({ data }) => {
             </tr>
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Reason & Notes */}
@@ -209,7 +211,13 @@ export const HandoverReceipt: React.FC<{ data: ReceiptData }> = ({ data }) => {
       </div>
 
       {/* Signatures */}
-      <div className={`grid ${data.kind === 'TRANSFER' ? 'grid-cols-4' : 'grid-cols-3'} gap-4 pt-4 text-center text-xs`}>
+      <div
+        className={`grid ${
+          data.kind === 'TRANSFER'
+            ? 'grid-cols-2 sm:grid-cols-4 print:grid-cols-4'
+            : 'grid-cols-2 sm:grid-cols-3 print:grid-cols-3'
+        } gap-4 pt-4 text-center text-xs`}
+      >
         <div>
           <div className="font-bold uppercase text-slate-800">Bên bàn giao</div>
           <div className="text-[11px] italic text-slate-500 mt-0.5">(Ký, ghi rõ họ tên)</div>

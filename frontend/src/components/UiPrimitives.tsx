@@ -69,11 +69,11 @@ export const PageHeader: React.FC<{
   subtitle?: string;
   actions?: React.ReactNode;
   className?: string;
-}> = ({ title, subtitle, actions, className = 'mb-5' }) => (
-  <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${className}`}>
-    <div>
-      <h1 className="text-xl font-semibold text-ink-primary tracking-tight">{title}</h1>
-      {subtitle && <p className="text-sm text-ink-secondary mt-0.5">{subtitle}</p>}
+}> = ({ title, subtitle, actions, className = 'mb-4 sm:mb-5' }) => (
+  <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 sm:gap-3 ${className}`}>
+    <div className="min-w-0">
+      <h1 className="text-lg sm:text-xl font-semibold text-ink-primary tracking-tight leading-snug">{title}</h1>
+      {subtitle && <p className="text-xs sm:text-sm text-ink-secondary mt-0.5">{subtitle}</p>}
     </div>
     {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
   </div>
@@ -89,22 +89,22 @@ export const Modal: React.FC<{
 }> = ({ open, onClose, title, subtitle, maxWidth = 'max-w-2xl', children }) => {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 overflow-y-auto">
-      <div className={`w-full ${maxWidth} bg-white rounded-lg border border-line shadow-xl my-8 overflow-hidden`}>
-        <div className="flex items-start justify-between px-5 py-4 border-b border-line bg-slate-50/70">
-          <div>
-            <h2 className="text-base font-semibold text-ink-primary">{title}</h2>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/50 p-0 sm:p-4 overflow-y-auto">
+      <div className={`w-full ${maxWidth} bg-white rounded-t-2xl sm:rounded-lg border border-line shadow-xl sm:my-8 overflow-hidden`}>
+        <div className="flex items-start justify-between gap-3 px-4 sm:px-5 py-3.5 sm:py-4 border-b border-line bg-slate-50/70">
+          <div className="min-w-0">
+            <h2 className="text-sm sm:text-base font-semibold text-ink-primary truncate">{title}</h2>
             {subtitle && <p className="text-xs text-ink-secondary mt-0.5">{subtitle}</p>}
           </div>
           <button
             onClick={onClose}
-            className="p-1 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200/60"
+            className="p-1.5 text-slate-400 hover:text-slate-600 rounded hover:bg-slate-200/60 shrink-0"
             aria-label="Đóng"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
-        <div className="p-5 max-h-[80vh] overflow-y-auto">{children}</div>
+        <div className="p-4 sm:p-5 max-h-[82vh] sm:max-h-[80vh] overflow-y-auto">{children}</div>
       </div>
     </div>
   );

@@ -65,7 +65,7 @@ export const TablePagination: React.FC<{
   if (totalItems === 0) return null;
 
   return (
-    <div className="border-t border-line bg-slate-50/80 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-secondary">
+    <div className="border-t border-line bg-slate-50/80 px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 text-xs text-ink-secondary">
       <div className="flex items-center gap-3 flex-wrap">
         <span className="tabular-nums">
           Hiển thị {startIndex + 1}–{Math.min(startIndex + pageSize, totalItems)} / {totalItems} {unitLabel}
