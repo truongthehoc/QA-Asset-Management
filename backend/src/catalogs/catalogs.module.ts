@@ -132,7 +132,11 @@ export class CatalogsService {
         include: { _count: { select: { types: true, assets: true } } },
         orderBy: { name: 'asc' },
       }),
-      this.prisma.assetType.findMany({ where: { isActive: true }, include: { category: true }, orderBy: { name: 'asc' } }),
+      this.prisma.assetType.findMany({
+        where: { isActive: true },
+        include: { category: true },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      }),
       this.prisma.assetStatusCatalog.findMany({ orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }] }),
       this.prisma.supplier.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
       this.prisma.role.findMany({
@@ -614,8 +618,72 @@ export class CatalogsService {
   }
 
   // Asset Types
-  createAssetType(data: any) {
-    return this.prisma.assetType.create({ data: { code: data.code.trim().toUpperCase(), name: data.name.trim(), categoryId: data.categoryId, supportsAgent: !!data.supportsAgent, description: data.description || null } });
+  listAssetTypes() {
+    return this.prisma.assetType.findMany({
+      include: {
+        category: true,
+        _count: { select: { assets: true } },
+      },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
+  async createAssetType(data: any) {
+    const code = (data.code || '').trim().toUpperCase();
+    const name = (data.name || '').trim();
+    if (!code || !name || !data.categoryId) {
+      throw new BadRequestException('Vui lòng nhập đầy đủ mã, tên loại tài sản và nhóm tài sản.');
+    }
+    const dup = await this.prisma.assetType.findUnique({ where: { code } });
+    if (dup) throw new ConflictException(`Mã loại tài sản "${code}" đã tồn tại.`);
+    const maxOrder = await this.prisma.assetType.aggregate({ _max: { sortOrder: true } });
+    return this.prisma.assetType.create({
+      data: {
+        code,
+        name,
+        categoryId: data.categoryId,
+        supportsAgent: !!data.supportsAgent,
+        description: data.description?.trim() || null,
+        sortOrder: data.sortOrder !== undefined && data.sortOrder !== '' ? Number(data.sortOrder) : (maxOrder._max.sortOrder || 0) + 1,
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+      },
+      include: { category: true },
+    });
+  }
+
+  async updateAssetType(id: string, data: any) {
+    const existing = await this.prisma.assetType.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy loại tài sản.');
+    const code = data.code !== undefined ? String(data.code).trim().toUpperCase() : existing.code;
+    const name = data.name !== undefined ? String(data.name).trim() : existing.name;
+    if (!code || !name) throw new BadRequestException('Mã và tên loại tài sản không được để trống.');
+    if (code !== existing.code) {
+      const dup = await this.prisma.assetType.findUnique({ where: { code } });
+      if (dup) throw new ConflictException(`Mã loại tài sản "${code}" đã tồn tại.`);
+    }
+    return this.prisma.assetType.update({
+      where: { id },
+      data: {
+        code,
+        name,
+        categoryId: data.categoryId || existing.categoryId,
+        supportsAgent: data.supportsAgent !== undefined ? Boolean(data.supportsAgent) : existing.supportsAgent,
+        description: data.description !== undefined ? data.description?.trim() || null : existing.description,
+        sortOrder: data.sortOrder !== undefined && data.sortOrder !== '' ? Number(data.sortOrder) : existing.sortOrder,
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : existing.isActive,
+      },
+      include: { category: true },
+    });
+  }
+
+  async toggleAssetTypeActive(id: string, isActive: boolean) {
+    const existing = await this.prisma.assetType.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy loại tài sản.');
+    return this.prisma.assetType.update({
+      where: { id },
+      data: { isActive: Boolean(isActive) },
+      include: { category: true },
+    });
   }
 
   // Suppliers
@@ -1035,10 +1103,27 @@ export class CatalogsController {
     return this.service.deleteAssetCategory(id, user);
   }
 
+  @Get('asset-types')
+  listAssetTypes() {
+    return this.service.listAssetTypes();
+  }
+
   @Post('asset-types')
   @RequirePermissions('catalogs.create')
   createAssetType(@Body() body: any) {
     return this.service.createAssetType(body);
+  }
+
+  @Patch('asset-types/:id')
+  @RequirePermissions('catalogs.update')
+  updateAssetType(@Param('id') id: string, @Body() body: any) {
+    return this.service.updateAssetType(id, body);
+  }
+
+  @Patch('asset-types/:id/active')
+  @RequirePermissions('catalogs.update')
+  toggleAssetType(@Param('id') id: string, @Body() body: { isActive: boolean }) {
+    return this.service.toggleAssetTypeActive(id, body.isActive);
   }
 
   @Get('asset-statuses')
