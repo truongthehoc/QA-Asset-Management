@@ -47,7 +47,7 @@ export const AssetCreatePage: React.FC = () => {
     assetTypes: [],
     locations: [],
     suppliers: [],
-    users: [],
+    employees: [],
   });
   const [errorMsg, setErrorMsg] = useState('');
   const [saving, setSaving] = useState(false);
@@ -64,7 +64,7 @@ export const AssetCreatePage: React.FC = () => {
     hostname: '',
     managingDepartmentId: '',
     usingDepartmentId: '',
-    assignedUserId: '',
+    assignedEmployeeId: '',
     assignedUserName: '',
     locationId: '',
     locationDetail: '',
@@ -173,7 +173,7 @@ export const AssetCreatePage: React.FC = () => {
         hostname: form.hostname || undefined,
         managingDepartmentId: form.managingDepartmentId || undefined,
         usingDepartmentId: form.usingDepartmentId || undefined,
-        assignedUserId: form.assignedUserId || undefined,
+        assignedEmployeeId: form.assignedEmployeeId || undefined,
         assignedUserName: form.assignedUserName || undefined,
         locationId: form.locationId || undefined,
         locationDetail: form.locationDetail || undefined,
@@ -398,13 +398,13 @@ export const AssetCreatePage: React.FC = () => {
                 value={form.usingDepartmentId}
                 onChange={(e) => {
                   const nextDeptId = e.target.value;
-                  const currentSelected = (meta.users || []).find((u: any) => u.id === form.assignedUserId);
-                  const keepUser = currentSelected && (!nextDeptId || currentSelected.departmentId === nextDeptId);
+                  const currentSelected = (meta.employees || []).find((emp: any) => emp.id === form.assignedEmployeeId);
+                  const keepEmp = currentSelected && (!nextDeptId || currentSelected.departmentId === nextDeptId);
                   setForm({
                     ...form,
                     usingDepartmentId: nextDeptId,
-                    assignedUserId: keepUser ? form.assignedUserId : '',
-                    assignedUserName: keepUser ? form.assignedUserName : '',
+                    assignedEmployeeId: keepEmp ? form.assignedEmployeeId : '',
+                    assignedUserName: keepEmp ? form.assignedUserName : '',
                   });
                 }}
                 className="input-field"
@@ -418,20 +418,20 @@ export const AssetCreatePage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="label-field">Người sử dụng</label>
+              <label className="label-field">Nhân viên sử dụng</label>
               {(() => {
-                const deptUsers = (meta.users || []).filter(
-                  (u: any) => !form.usingDepartmentId || u.departmentId === form.usingDepartmentId,
+                const deptEmps = (meta.employees || []).filter(
+                  (emp: any) => !form.usingDepartmentId || emp.departmentId === form.usingDepartmentId,
                 );
                 return (
                   <select
-                    value={form.assignedUserId}
+                    value={form.assignedEmployeeId}
                     onChange={(e) => {
-                      const uid = e.target.value;
-                      const chosen = deptUsers.find((u: any) => u.id === uid);
+                      const empId = e.target.value;
+                      const chosen = deptEmps.find((emp: any) => emp.id === empId);
                       setForm({
                         ...form,
-                        assignedUserId: uid,
+                        assignedEmployeeId: empId,
                         assignedUserName: chosen ? chosen.fullName : '',
                         receivedBy: form.receivedBy || (chosen ? chosen.fullName : ''),
                       });
@@ -440,14 +440,14 @@ export const AssetCreatePage: React.FC = () => {
                   >
                     <option value="">
                       {!form.usingDepartmentId
-                        ? '-- Chọn người sử dụng --'
-                        : deptUsers.length === 0
-                          ? '-- Phòng ban chưa có người dùng --'
-                          : `-- Chọn người dùng (${deptUsers.length}) --`}
+                        ? '-- Chọn nhân viên sử dụng --'
+                        : deptEmps.length === 0
+                          ? '-- Phòng ban chưa có nhân viên --'
+                          : `-- Chọn nhân viên (${deptEmps.length}) --`}
                     </option>
-                    {deptUsers.map((u: any) => (
-                      <option key={u.id} value={u.id}>
-                        {u.fullName} ({u.username}){u.title ? ` — ${u.title}` : ''}
+                    {deptEmps.map((emp: any) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.code} — {emp.fullName}{emp.title ? ` (${emp.title})` : ''}
                       </option>
                     ))}
                   </select>

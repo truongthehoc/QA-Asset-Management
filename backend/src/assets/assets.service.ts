@@ -268,6 +268,7 @@ export class AssetsService {
           managingDepartmentId: body.managingDepartmentId || null,
           usingDepartmentId: body.usingDepartmentId || null,
           assignedUserId: body.assignedUserId || null,
+          assignedEmployeeId: body.assignedEmployeeId || null,
           assignedUserName: body.assignedUserName || null,
           locationId: body.locationId || null,
           locationDetail: body.locationDetail || null,

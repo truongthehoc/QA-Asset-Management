@@ -805,9 +805,21 @@ export class AgentsService {
   }
 
   async listEnrollmentTokens() {
-    return this.prisma.enrollmentToken.findMany({
+    const now = new Date();
+    const list = await this.prisma.enrollmentToken.findMany({
       include: { createdBy: { select: { fullName: true } } },
       orderBy: { createdAt: 'desc' },
+    });
+    return list.map((t) => {
+      const isExpired = Boolean(t.expiresAt && t.expiresAt < now);
+      const isExhausted = Boolean(t.maxUses && t.usedCount >= t.maxUses);
+      const isUsable = !t.isRevoked && !isExpired && !isExhausted;
+      return {
+        ...t,
+        isExpired,
+        isUsable,
+        tokenValue: isUsable ? t.tokenValue : null,
+      };
     });
   }
 
@@ -822,6 +834,7 @@ export class AgentsService {
         name: data.name,
         tokenHash: sha256(rawToken),
         tokenPreview: `${rawToken.slice(0, 14)}...${rawToken.slice(-4)}`,
+        tokenValue: rawToken,
         maxUses: data.maxUses ? Number(data.maxUses) : null,
         expiresAt,
         createdById: actor.id,
@@ -841,7 +854,7 @@ export class AgentsService {
   async revokeEnrollmentToken(id: string, actor: { id: string; fullName: string }) {
     const updated = await this.prisma.enrollmentToken.update({
       where: { id },
-      data: { isRevoked: true },
+      data: { isRevoked: true, tokenValue: null },
     });
     await this.auditService.log({
       userId: actor.id,

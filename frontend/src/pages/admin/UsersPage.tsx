@@ -6,7 +6,7 @@ import { formatDateTime } from '../../utils/format';
 
 export const UsersPage: React.FC = () => {
   const [users, setUsers] = useState<any[]>([]);
-  const [meta, setMeta] = useState<any>({ departments: [], roles: [] });
+  const [meta, setMeta] = useState<any>({ departments: [], roles: [], employees: [] });
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -19,6 +19,7 @@ export const UsersPage: React.FC = () => {
     password: '',
     roleId: '',
     departmentId: '',
+    employeeId: '',
     scopeType: 'DEPARTMENT',
   });
 
@@ -34,7 +35,7 @@ export const UsersPage: React.FC = () => {
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ username: '', email: '', fullName: '', title: '', password: '', roleId: '', departmentId: '', scopeType: 'DEPARTMENT' });
+    setForm({ username: '', email: '', fullName: '', title: '', password: '', roleId: '', departmentId: '', employeeId: '', scopeType: 'DEPARTMENT' });
     setOpen(true);
   };
 
@@ -47,10 +48,23 @@ export const UsersPage: React.FC = () => {
       title: u.title || '',
       password: '',
       roleId: u.userRoles?.[0]?.roleId || '',
-      departmentId: u.department?.id || '',
+      departmentId: u.department?.id || u.employee?.departmentId || '',
+      employeeId: u.employeeId || '',
       scopeType: u.userRoles?.[0]?.scopeType || 'DEPARTMENT',
     });
     setOpen(true);
+  };
+
+  const handleEmployeeSelect = (empId: string) => {
+    const emp = (meta.employees || []).find((e: any) => e.id === empId);
+    setForm((prev) => ({
+      ...prev,
+      employeeId: empId,
+      fullName: emp ? emp.fullName : prev.fullName,
+      email: emp?.email ? emp.email : prev.email,
+      title: emp?.title ? emp.title : prev.title,
+      departmentId: emp?.departmentId ? emp.departmentId : prev.departmentId,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -62,10 +76,14 @@ export const UsersPage: React.FC = () => {
         email: form.email,
         title: form.title,
         departmentId: form.departmentId || null,
+        employeeId: form.employeeId || null,
       });
-      setMsg(`Đã cập nhật thông tin & phòng ban cho "${form.fullName.trim()}".`);
+      setMsg(`Đã cập nhật thông tin & liên kết nhân viên cho "${form.fullName.trim()}".`);
     } else {
-      await api.post('/admin/users', form);
+      await api.post('/admin/users', {
+        ...form,
+        employeeId: form.employeeId || undefined,
+      });
       setMsg('Đã tạo người dùng mới thành công.');
     }
     setOpen(false);
@@ -115,6 +133,7 @@ export const UsersPage: React.FC = () => {
                 <th className="th-cell w-12 text-center">STT</th>
                 <th className="th-cell">Tài khoản</th>
                 <th className="th-cell">Họ tên & Email</th>
+                <th className="th-cell">Nhân viên liên kết</th>
                 <th className="th-cell">Phòng ban</th>
                 <th className="th-cell">Vai trò & Phạm vi</th>
                 <th className="th-cell">Đăng nhập gần nhất</th>
@@ -131,7 +150,17 @@ export const UsersPage: React.FC = () => {
                     <div className="font-medium text-ink-primary">{u.fullName}</div>
                     <div className="text-ink-muted">{u.email}</div>
                   </td>
-                  <td className="td-cell text-xs">{u.department?.name || '—'}</td>
+                  <td className="td-cell text-xs">
+                    {u.employee ? (
+                      <div>
+                        <span className="font-mono font-semibold text-brand mr-1">{u.employee.code}</span>
+                        <span>{u.employee.fullName}</span>
+                      </div>
+                    ) : (
+                      <span className="text-ink-muted">Chưa liên kết</span>
+                    )}
+                  </td>
+                  <td className="td-cell text-xs">{u.employee?.department?.name || u.department?.name || '—'}</td>
                   <td className="td-cell text-xs">
                     {u.userRoles?.map((ur: any) => (
                       <Badge key={ur.id} label={`${ur.role?.name} (${ur.scopeType})`} cls="bg-brand-soft text-brand border-sky-200 mr-1" />
@@ -163,6 +192,21 @@ export const UsersPage: React.FC = () => {
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? `Chỉnh sửa người dùng — ${editing.username}` : 'Tạo tài khoản người dùng mới'} maxWidth="max-w-xl">
         <form onSubmit={handleSubmit} className="space-y-3.5">
+          <div>
+            <label className="label-field">Liên kết Nhân viên</label>
+            <select
+              value={form.employeeId}
+              onChange={(e) => handleEmployeeSelect(e.target.value)}
+              className="input-field"
+            >
+              <option value="">-- Không liên kết / Chọn nhân viên --</option>
+              {(meta.employees || []).map((emp: any) => (
+                <option key={emp.id} value={emp.id}>
+                  {emp.code} — {emp.fullName}{emp.title ? ` (${emp.title})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="grid sm:grid-cols-2 gap-3">
             {!editing && (
               <>

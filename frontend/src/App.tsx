@@ -22,6 +22,7 @@ import { AssetTypesPage } from './pages/admin/AssetTypesPage';
 import { AssetStatusesPage } from './pages/admin/AssetStatusesPage';
 import { LocationsPage } from './pages/admin/LocationsPage';
 import { SuppliersPage } from './pages/admin/SuppliersPage';
+import { EmployeesPage } from './pages/admin/EmployeesPage';
 import { UsersPage } from './pages/admin/UsersPage';
 import { RolesPage } from './pages/admin/RolesPage';
 import { SettingsPage } from './pages/admin/SettingsPage';
@@ -65,6 +66,7 @@ export function App() {
           <Route path="/admin/asset-statuses" element={<ProtectedRoute><AssetStatusesPage /></ProtectedRoute>} />
           <Route path="/admin/locations" element={<ProtectedRoute><LocationsPage /></ProtectedRoute>} />
           <Route path="/admin/suppliers" element={<ProtectedRoute><SuppliersPage /></ProtectedRoute>} />
+          <Route path="/admin/employees" element={<ProtectedRoute><EmployeesPage /></ProtectedRoute>} />
           <Route path="/admin/users" element={<ProtectedRoute><UsersPage /></ProtectedRoute>} />
           <Route path="/admin/roles" element={<ProtectedRoute><RolesPage /></ProtectedRoute>} />
           <Route path="/admin/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />

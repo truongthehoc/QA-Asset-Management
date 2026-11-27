@@ -24,6 +24,7 @@ model Department {
   updatedAt           DateTime @updatedAt
 
   users               User[]
+  employees           Employee[]
   managedAssets       Asset[]          @relation("ManagingDepartment")
   usingAssets         Asset[]          @relation("UsingDepartment")
   assignmentsFrom     AssetAssignment[] @relation("AssignDept")
@@ -107,6 +108,23 @@ model AssetStatusCatalog {
   updatedAt   DateTime @updatedAt
 }
 
+model Employee {
+  id           String      @id @default(uuid())
+  code         String      @unique
+  fullName     String
+  email        String?
+  phone        String?
+  title        String?
+  departmentId String?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  department   Department? @relation(fields: [departmentId], references: [id])
+  users        User[]
+  assets       Asset[]     @relation("AssetEmployee")
+}
+
 model User {
   id            String    @id @default(uuid())
   username      String    @unique
@@ -117,12 +135,14 @@ model User {
   phone         String?
   title         String?
   departmentId  String?
+  employeeId    String?
   isActive      Boolean   @default(true)
   lastLoginAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   department          Department?           @relation(fields: [departmentId], references: [id])
+  employee            Employee?             @relation(fields: [employeeId], references: [id])
   userRoles           UserRole[]
   assignedAssets      Asset[]               @relation("AssetAssignee")
   uploadedDocuments   AssetDocument[]
@@ -210,6 +230,7 @@ model Asset {
   managingDepartmentId  String?
   usingDepartmentId     String?
   assignedUserId        String?
+  assignedEmployeeId    String?
   assignedUserName      String?
   locationId            String?
   locationDetail        String?
@@ -229,6 +250,7 @@ model Asset {
   managingDepartment    Department?       @relation("ManagingDepartment", fields: [managingDepartmentId], references: [id])
   usingDepartment       Department?       @relation("UsingDepartment", fields: [usingDepartmentId], references: [id])
   assignedUser          User?             @relation("AssetAssignee", fields: [assignedUserId], references: [id])
+  assignedEmployee      Employee?         @relation("AssetEmployee", fields: [assignedEmployeeId], references: [id])
   location              Location?         @relation(fields: [locationId], references: [id])
 
   purchase              AssetPurchase?
@@ -441,18 +463,19 @@ model InventoryItem {
 // ============================================================================
 
 model EnrollmentToken {
-  id          String    @id @default(uuid())
-  name        String
-  tokenHash   String    @unique
+  id           String    @id @default(uuid())
+  name         String
+  tokenHash    String    @unique
   tokenPreview String
-  maxUses     Int?
-  usedCount   Int       @default(0)
-  expiresAt   DateTime
-  isRevoked   Boolean   @default(false)
-  createdById String?
-  createdAt   DateTime  @default(now())
+  tokenValue   String?
+  maxUses      Int?
+  usedCount    Int       @default(0)
+  expiresAt    DateTime
+  isRevoked    Boolean   @default(false)
+  createdById  String?
+  createdAt    DateTime  @default(now())
 
-  createdBy   User?     @relation(fields: [createdById], references: [id])
+  createdBy    User?     @relation(fields: [createdById], references: [id])
 }
 
 model AgentVersion {

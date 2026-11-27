@@ -99,7 +99,7 @@ export const DepartmentsPage: React.FC = () => {
                 <th className="th-cell w-12 text-center">STT</th>
                 <th className="th-cell">Mã phòng ban</th>
                 <th className="th-cell">Tên phòng ban</th>
-                <th className="th-cell text-right">Số người dùng</th>
+                <th className="th-cell text-right">Số nhân viên</th>
                 <th className="th-cell text-right">Số tài sản</th>
                 <th className="th-cell">Mô tả</th>
                 {can('admin.catalogs') && <th className="th-cell text-right">Thao tác</th>}
@@ -114,7 +114,7 @@ export const DepartmentsPage: React.FC = () => {
                     <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
                     <td className="td-cell font-mono text-xs font-semibold text-brand">{d.code}</td>
                     <td className="td-cell font-medium">{d.name}</td>
-                    <td className="td-cell text-right font-mono text-xs tabular-nums">{d._count?.users ?? 0}</td>
+                    <td className="td-cell text-right font-mono text-xs tabular-nums">{d._count?.employees ?? 0}</td>
                     <td className="td-cell text-right font-mono text-xs tabular-nums">{d._count?.usingAssets ?? 0}</td>
                     <td className="td-cell text-xs text-ink-muted">{d.description || '—'}</td>
                     {can('admin.catalogs') && (

@@ -21,20 +21,51 @@ export const AgentManagementPage: React.FC = () => {
       : window.location.origin;
   const [installerForm, setInstallerForm] = useState({
     backendUrl: defaultBackendUrl,
-    enrollmentToken: 'ENROLL-ITAM-2026-INTERNAL',
+    enrollmentToken: '',
     allowSelfSignedCert: false,
   });
+  const [selectedTokenId, setSelectedTokenId] = useState<string>('');
   const [downloading, setDownloading] = useState(false);
 
   const load = async () => {
     const [tRes, vRes] = await Promise.all([api.get('/agents/tokens'), api.get('/agents/versions')]);
-    setTokens(tRes.data || []);
+    const tokenList: any[] = tRes.data || [];
+    setTokens(tokenList);
     setVersions(vRes.data || []);
+
+    // Auto-select first active usable token if none selected or previously selected was revoked
+    const activeUsable = tokenList.filter((t) => t.isUsable && t.tokenValue);
+    setInstallerForm((prev) => {
+      const stillValid = activeUsable.some((t) => t.tokenValue === prev.enrollmentToken);
+      if (stillValid && prev.enrollmentToken) return prev;
+      const first = activeUsable[0];
+      if (first) {
+        setSelectedTokenId(first.id);
+        return { ...prev, enrollmentToken: first.tokenValue };
+      }
+      setSelectedTokenId('');
+      return { ...prev, enrollmentToken: '' };
+    });
   };
 
   useEffect(() => {
     load();
   }, []);
+
+  const handleSelectTokenRow = (t: any) => {
+    setErrMsg('');
+    if (!t.isUsable) {
+      setErrMsg(`Token "${t.name}" đã thu hồi, hết hạn hoặc hết lượt sử dụng — không thể dùng để cài mới.`);
+      return;
+    }
+    if (!t.tokenValue) {
+      setErrMsg(`Token "${t.name}" được tạo trước khi bật tính năng chọn nhanh. Hãy dán mã đã lưu hoặc tạo Token mới.`);
+      return;
+    }
+    setSelectedTokenId(t.id);
+    setInstallerForm((f) => ({ ...f, enrollmentToken: t.tokenValue }));
+    setMsg(`Đã nạp mã Token từ đợt "${t.name}" lên khung tải bộ cài.`);
+  };
 
   const handleCreateToken = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +77,7 @@ export const AgentManagementPage: React.FC = () => {
       expiresDays: Number(tokenForm.expiresDays) || 30,
     });
     setNewRawToken(res.data.rawToken);
+    setSelectedTokenId(res.data.id || '');
     setInstallerForm((f) => ({ ...f, enrollmentToken: res.data.rawToken }));
     setTokenForm({ name: '', maxUses: '100', expiresDays: '30' });
     load();
@@ -221,28 +253,54 @@ export const AgentManagementPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {tokens.map((t, idx) => (
-                <tr key={t.id}>
-                  <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
-                  <td className="td-cell text-xs font-medium">{t.name}</td>
-                  <td className="td-cell font-mono text-xs">{t.tokenPreview}</td>
-                  <td className="td-cell font-mono text-xs tabular-nums">{t.usedCount} / {t.maxUses || '∞'}</td>
-                  <td className="td-cell text-xs">{formatDate(t.expiresAt)}</td>
-                  <td className="td-cell">
-                    <Badge
-                      label={t.isRevoked ? 'Đã thu hồi' : 'Hiệu lực'}
-                      cls={t.isRevoked ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}
-                    />
-                  </td>
-                  <td className="td-cell text-right">
-                    {!t.isRevoked && (
-                      <button onClick={() => handleRevokeToken(t.id)} className="btn-secondary text-red-600 px-2.5 py-1 text-xs">
-                        Thu hồi
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {tokens.map((t, idx) => {
+                const isSelected = selectedTokenId === t.id && t.isUsable;
+                const statusLabel = t.isRevoked
+                  ? 'Đã thu hồi'
+                  : t.isExpired
+                    ? 'Hết hạn'
+                    : !t.isUsable
+                      ? 'Hết lượt'
+                      : 'Hiệu lực';
+                const statusCls = t.isUsable
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  : 'bg-red-50 text-red-700 border-red-200';
+                return (
+                  <tr
+                    key={t.id}
+                    onClick={() => handleSelectTokenRow(t)}
+                    title={t.isUsable ? 'Nhấn để nạp mã Token này lên khung tải bộ cài' : undefined}
+                    className={`transition-colors ${
+                      t.isUsable ? 'cursor-pointer' : 'opacity-70'
+                    } ${isSelected ? '!bg-[#DFF1F8]' : ''}`}
+                  >
+                    <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
+                    <td className="td-cell text-xs font-medium">
+                      <div className="flex items-center gap-2">
+                        <span>{t.name}</span>
+                        {isSelected && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand text-white font-medium">
+                            Đang chọn
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="td-cell font-mono text-xs">{t.tokenPreview}</td>
+                    <td className="td-cell font-mono text-xs tabular-nums">{t.usedCount} / {t.maxUses || '∞'}</td>
+                    <td className="td-cell text-xs">{formatDate(t.expiresAt)}</td>
+                    <td className="td-cell">
+                      <Badge label={statusLabel} cls={statusCls} />
+                    </td>
+                    <td className="td-cell text-right" onClick={(e) => e.stopPropagation()}>
+                      {!t.isRevoked && (
+                        <button onClick={() => handleRevokeToken(t.id)} className="btn-secondary text-red-600 px-2.5 py-1 text-xs">
+                          Thu hồi
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

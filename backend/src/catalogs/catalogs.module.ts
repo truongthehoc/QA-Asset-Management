@@ -49,10 +49,10 @@ export class CatalogsService {
 
   async getAllMeta() {
     await Promise.all([this.ensureDefaultAssetStatuses(), this.ensureDefaultSystemSettings()]);
-    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions, users, lanScanSetting] = await Promise.all([
+    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions, users, employees, lanScanSetting] = await Promise.all([
       this.prisma.department.findMany({
         where: { isActive: true },
-        include: { _count: { select: { users: true, usingAssets: true } } },
+        include: { _count: { select: { users: true, employees: true, usingAssets: true } } },
         orderBy: { name: 'asc' },
       }),
       this.prisma.location.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
@@ -81,6 +81,20 @@ export class CatalogsService {
           email: true,
           title: true,
           departmentId: true,
+          employeeId: true,
+        },
+        orderBy: { fullName: 'asc' },
+      }),
+      this.prisma.employee.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          code: true,
+          fullName: true,
+          email: true,
+          phone: true,
+          title: true,
+          departmentId: true,
         },
         orderBy: { fullName: 'asc' },
       }),
@@ -96,10 +110,135 @@ export class CatalogsService {
       roles,
       permissions,
       users,
+      employees,
       features: {
         lanScanEnabled: lanScanSetting?.value === 'true',
       },
     };
+  }
+
+  // Employees (Danh mục Nhân viên)
+  async listEmployees() {
+    return this.prisma.employee.findMany({
+      include: {
+        department: true,
+        users: { select: { id: true, username: true, isActive: true } },
+        _count: { select: { assets: true, users: true } },
+      },
+      orderBy: [{ isActive: 'desc' }, { fullName: 'asc' }],
+    });
+  }
+
+  async createEmployee(data: any, actor: AuthUser) {
+    const code = (data.code || '').trim().toUpperCase();
+    const fullName = (data.fullName || '').trim();
+    if (!code || !fullName) {
+      throw new BadRequestException('Vui lòng nhập đầy đủ mã nhân viên và họ tên.');
+    }
+    const dup = await this.prisma.employee.findUnique({ where: { code } });
+    if (dup) throw new ConflictException(`Mã nhân viên "${code}" đã tồn tại.`);
+
+    const created = await this.prisma.employee.create({
+      data: {
+        code,
+        fullName,
+        email: data.email?.trim() || null,
+        phone: data.phone?.trim() || null,
+        title: data.title?.trim() || null,
+        departmentId: data.departmentId || null,
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+      },
+      include: { department: true },
+    });
+    await this.auditService.log({
+      userId: actor.id,
+      actorName: actor.fullName,
+      action: 'EMPLOYEE_CREATED',
+      entityType: 'Employee',
+      entityId: created.id,
+      newValue: `${created.code} - ${created.fullName}`,
+    });
+    return created;
+  }
+
+  async updateEmployee(id: string, data: any, actor: AuthUser) {
+    const existing = await this.prisma.employee.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy nhân viên.');
+
+    const code = data.code !== undefined ? String(data.code).trim().toUpperCase() : existing.code;
+    const fullName = data.fullName !== undefined ? String(data.fullName).trim() : existing.fullName;
+    if (!code || !fullName) {
+      throw new BadRequestException('Mã nhân viên và họ tên không được để trống.');
+    }
+    if (code !== existing.code) {
+      const dup = await this.prisma.employee.findUnique({ where: { code } });
+      if (dup) throw new ConflictException(`Mã nhân viên "${code}" đã tồn tại.`);
+    }
+
+    const updated = await this.prisma.employee.update({
+      where: { id },
+      data: {
+        code,
+        fullName,
+        email: data.email !== undefined ? data.email?.trim() || null : existing.email,
+        phone: data.phone !== undefined ? data.phone?.trim() || null : existing.phone,
+        title: data.title !== undefined ? data.title?.trim() || null : existing.title,
+        departmentId: data.departmentId !== undefined ? data.departmentId || null : existing.departmentId,
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : existing.isActive,
+      },
+      include: { department: true },
+    });
+    await this.auditService.log({
+      userId: actor.id,
+      actorName: actor.fullName,
+      action: 'EMPLOYEE_UPDATED',
+      entityType: 'Employee',
+      entityId: id,
+      oldValue: `${existing.code} - ${existing.fullName}`,
+      newValue: `${updated.code} - ${updated.fullName}`,
+    });
+    return updated;
+  }
+
+  async toggleEmployeeActive(id: string, isActive: boolean, actor: AuthUser) {
+    const existing = await this.prisma.employee.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Không tìm thấy nhân viên.');
+    const updated = await this.prisma.employee.update({
+      where: { id },
+      data: { isActive: Boolean(isActive) },
+    });
+    await this.auditService.log({
+      userId: actor.id,
+      actorName: actor.fullName,
+      action: isActive ? 'EMPLOYEE_ACTIVATED' : 'EMPLOYEE_DEACTIVATED',
+      entityType: 'Employee',
+      entityId: id,
+      newValue: `${updated.code} - ${updated.fullName}`,
+    });
+    return updated;
+  }
+
+  async deleteEmployee(id: string, actor: AuthUser) {
+    const existing = await this.prisma.employee.findUnique({
+      where: { id },
+      include: { _count: { select: { assets: true, users: true } } },
+    });
+    if (!existing) throw new NotFoundException('Không tìm thấy nhân viên.');
+    if (existing._count.assets > 0 || existing._count.users > 0) {
+      throw new BadRequestException(
+        `Không thể xóa nhân viên "${existing.fullName}" vì đang liên kết với ${existing._count.assets} tài sản và ${existing._count.users} tài khoản người dùng. Hãy gạt sang trạng thái Ngưng hoạt động.`,
+      );
+    }
+    await this.prisma.employee.delete({ where: { id } });
+    await this.auditService.log({
+      userId: actor.id,
+      actorName: actor.fullName,
+      action: 'EMPLOYEE_DELETED',
+      entityType: 'Employee',
+      entityId: id,
+      oldValue: `${existing.code} - ${existing.fullName}`,
+    });
+    return { deleted: true };
   }
 
   // Asset Statuses (Danh mục Trạng thái tài sản)
@@ -495,6 +634,8 @@ export class CatalogsService {
         isActive: true,
         lastLoginAt: true,
         department: true,
+        employeeId: true,
+        employee: { include: { department: true } },
         userRoles: { include: { role: true, department: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -505,6 +646,11 @@ export class CatalogsService {
     if (!data.username || !data.email || !data.fullName) {
       throw new BadRequestException('Thiếu thông tin username, email hoặc họ tên.');
     }
+    let linkedEmp: any = null;
+    if (data.employeeId) {
+      linkedEmp = await this.prisma.employee.findUnique({ where: { id: data.employeeId } });
+    }
+    const departmentId = data.departmentId || linkedEmp?.departmentId || null;
     const passwordHash = await bcrypt.hash(data.password || 'Admin@123', 10);
     const user = await this.prisma.user.create({
       data: {
@@ -512,9 +658,10 @@ export class CatalogsService {
         email: data.email.trim(),
         fullName: data.fullName.trim(),
         passwordHash,
-        employeeCode: data.employeeCode || null,
-        title: data.title || null,
-        departmentId: data.departmentId || null,
+        employeeCode: data.employeeCode || linkedEmp?.code || null,
+        title: data.title || linkedEmp?.title || null,
+        departmentId,
+        employeeId: data.employeeId || null,
       },
     });
     if (data.roleId) {
@@ -523,7 +670,7 @@ export class CatalogsService {
           userId: user.id,
           roleId: data.roleId,
           scopeType: data.scopeType || 'ORGANIZATION',
-          departmentId: data.scopeType === 'DEPARTMENT' ? data.departmentId || null : null,
+          departmentId: data.scopeType === 'DEPARTMENT' ? departmentId : null,
         },
       });
     }
@@ -541,13 +688,22 @@ export class CatalogsService {
   async updateUser(id: string, data: any, actor: AuthUser) {
     const existing = await this.prisma.user.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Không tìm thấy người dùng.');
+    let linkedEmp: any = null;
+    if (data.employeeId) {
+      linkedEmp = await this.prisma.employee.findUnique({ where: { id: data.employeeId } });
+    }
     const updated = await this.prisma.user.update({
       where: { id },
       data: {
         fullName: data.fullName !== undefined ? String(data.fullName).trim() : existing.fullName,
         email: data.email !== undefined ? String(data.email).trim() : existing.email,
         title: data.title !== undefined ? (data.title?.trim() || null) : existing.title,
-        departmentId: data.departmentId !== undefined ? (data.departmentId || null) : existing.departmentId,
+        employeeId: data.employeeId !== undefined ? (data.employeeId || null) : existing.employeeId,
+        employeeCode: linkedEmp ? linkedEmp.code : existing.employeeCode,
+        departmentId:
+          data.departmentId !== undefined
+            ? (data.departmentId || linkedEmp?.departmentId || null)
+            : (linkedEmp?.departmentId ?? existing.departmentId),
       },
     });
     await this.auditService.log({
@@ -632,6 +788,35 @@ export class CatalogsController {
   @RequirePermissions('catalogs.delete')
   deleteDepartment(@Param('id') id: string) {
     return this.service.deleteDepartment(id);
+  }
+
+  @Get('employees')
+  listEmployees() {
+    return this.service.listEmployees();
+  }
+
+  @Post('employees')
+  @RequirePermissions('catalogs.create')
+  createEmployee(@Body() body: any, @CurrentUser() user: AuthUser) {
+    return this.service.createEmployee(body, user);
+  }
+
+  @Patch('employees/:id')
+  @RequirePermissions('catalogs.update')
+  updateEmployee(@Param('id') id: string, @Body() body: any, @CurrentUser() user: AuthUser) {
+    return this.service.updateEmployee(id, body, user);
+  }
+
+  @Patch('employees/:id/active')
+  @RequirePermissions('catalogs.update')
+  toggleEmployee(@Param('id') id: string, @Body() body: { isActive: boolean }, @CurrentUser() user: AuthUser) {
+    return this.service.toggleEmployeeActive(id, body.isActive, user);
+  }
+
+  @Delete('employees/:id')
+  @RequirePermissions('catalogs.delete')
+  deleteEmployee(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.service.deleteEmployee(id, user);
   }
 
   @Post('locations')
