@@ -23,6 +23,12 @@ export const AssetTypesPage: React.FC = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!msg) return;
+    const t = window.setTimeout(() => setMsg(''), 3000);
+    return () => window.clearTimeout(t);
+  }, [msg]);
+
   const openCreate = () => {
     setForm({ code: '', name: '', categoryId: categories[0]?.id || '', supportsAgent: false, description: '' });
     setOpen(true);

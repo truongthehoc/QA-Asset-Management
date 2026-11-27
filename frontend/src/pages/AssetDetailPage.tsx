@@ -12,10 +12,17 @@ import {
   ShieldCheck,
   AlertTriangle,
   Printer,
+  ArrowLeftRight,
+  Save,
+  StickyNote,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, downloadAuthorizedFile } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { AssetQrLabel, QrLabelConfig } from '../components/AssetQrLabel';
+import { HandoverReceipt, ReceiptData } from '../components/HandoverReceipt';
+import { CurrencyInput, DateInputVN } from '../components/FormInputs';
+import { TablePagination, usePagination } from '../components/TablePagination';
 import {
   Modal,
   AssetStatusBadge,
@@ -24,19 +31,19 @@ import {
   InventoryStatusBadge,
   Badge,
 } from '../components/UiPrimitives';
-import { formatDate, formatDateTime, formatVnd, formatBytes, DOC_TYPE_LABELS } from '../utils/format';
+import { formatDate, formatDateTime, formatVnd, formatBytes, DOC_TYPE_LABELS, formatAuditAction } from '../utils/format';
 
 const TABS = [
   { id: 'overview', label: '1. Tổng quan' },
   { id: 'hardware', label: '2. Cấu hình' },
   { id: 'software', label: '3. Phần mềm' },
   { id: 'windows', label: '4. Windows & License' },
-  { id: 'purchase', label: '5. Mua sắm' },
-  { id: 'documents', label: '6. Hồ sơ' },
-  { id: 'changes', label: '7. Lịch sử thay đổi' },
-  { id: 'transfers', label: '8. Bàn giao & điều chuyển' },
-  { id: 'maintenance', label: '9. Bảo trì' },
-  { id: 'inventory', label: '10. Kiểm kê & Audit' },
+  { id: 'purchase', label: '5. Mua sắm & Hồ sơ' },
+  { id: 'changes', label: '6. Lịch sử thay đổi' },
+  { id: 'transfers', label: '7. Bàn giao & điều chuyển' },
+  { id: 'maintenance', label: '8. Bảo trì' },
+  { id: 'inventory', label: '9. Kiểm kê & Audit' },
+  { id: 'notes', label: '10. Ghi chú' },
 ] as const;
 
 export const AssetDetailPage: React.FC = () => {
@@ -49,11 +56,37 @@ export const AssetDetailPage: React.FC = () => {
 
   // Modals
   const [qrOpen, setQrOpen] = useState(false);
+  const [qrConfig, setQrConfig] = useState<QrLabelConfig | undefined>(undefined);
+  const [orgInfo, setOrgInfo] = useState<any>(undefined);
+  const [docTemplate, setDocTemplate] = useState<any>(undefined);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [receipt, setReceipt] = useState<ReceiptData | null>(null);
+
+  // Purchase inline edit
+  const [editingPurchase, setEditingPurchase] = useState(false);
+  const [savingPurchase, setSavingPurchase] = useState(false);
+  const [purchaseForm, setPurchaseForm] = useState({
+    supplierId: '',
+    contractNumber: '',
+    invoiceNumber: '',
+    purchasePrice: '',
+    fundingSource: '',
+    purchaseDate: '',
+    inUseDate: '',
+    warrantyStartDate: '',
+    warrantyEndDate: '',
+    notes: '',
+  });
+
+  // Notes tab state
+  const [notesDraft, setNotesDraft] = useState('');
+  const [savingNotes, setSavingNotes] = useState(false);
   const [codeModalOpen, setCodeModalOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [codeReason, setCodeReason] = useState('');
 
   // Document upload
+  const [showDocUpload, setShowDocUpload] = useState(false);
   const [docType, setDocType] = useState('HANDOVER');
   const [docNotes, setDocNotes] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -63,13 +96,123 @@ export const AssetDetailPage: React.FC = () => {
     setLoading(true);
     api
       .get(`/assets/${id}`)
-      .then((r) => setAsset(r.data))
+      .then((r) => {
+        setAsset(r.data);
+        setNotesDraft(r.data?.notes || '');
+      })
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     load();
+    api
+      .get('/admin/meta')
+      .then((r) => {
+        setQrConfig(r.data?.qrConfig);
+        setOrgInfo(r.data?.orgInfo);
+        setDocTemplate(r.data?.docTemplate);
+        setSuppliers(r.data?.suppliers || []);
+      })
+      .catch(() => {});
   }, [id]);
+
+  const toDateInput = (d?: string | null) => {
+    if (!d) return '';
+    try {
+      return new Date(d).toISOString().slice(0, 10);
+    } catch {
+      return '';
+    }
+  };
+
+  const openPurchaseEdit = () => {
+    const p = asset?.purchase || {};
+    setPurchaseForm({
+      supplierId: p.supplierId || '',
+      contractNumber: p.contractNumber || '',
+      invoiceNumber: p.invoiceNumber || '',
+      purchasePrice: p.purchasePrice !== null && p.purchasePrice !== undefined ? String(p.purchasePrice) : '',
+      fundingSource: p.fundingSource || '',
+      purchaseDate: toDateInput(p.purchaseDate),
+      inUseDate: toDateInput(p.inUseDate),
+      warrantyStartDate: toDateInput(p.warrantyStartDate),
+      warrantyEndDate: toDateInput(p.warrantyEndDate),
+      notes: p.notes || '',
+    });
+    setEditingPurchase(true);
+  };
+
+  const handleSavePurchase = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!asset) return;
+    setSavingPurchase(true);
+    setMsg(null);
+    try {
+      await api.patch(`/assets/${asset.id}`, {
+        purchase: {
+          supplierId: purchaseForm.supplierId || null,
+          contractNumber: purchaseForm.contractNumber.trim() || null,
+          invoiceNumber: purchaseForm.invoiceNumber.trim() || null,
+          purchasePrice: purchaseForm.purchasePrice !== '' ? Number(purchaseForm.purchasePrice) : '',
+          fundingSource: purchaseForm.fundingSource.trim() || null,
+          purchaseDate: purchaseForm.purchaseDate || null,
+          inUseDate: purchaseForm.inUseDate || null,
+          warrantyStartDate: purchaseForm.warrantyStartDate || null,
+          warrantyEndDate: purchaseForm.warrantyEndDate || null,
+          notes: purchaseForm.notes.trim() || null,
+        },
+        reason: 'Cập nhật thông tin mua sắm & bảo hành',
+      });
+      setEditingPurchase(false);
+      setMsg({ type: 'ok', text: 'Đã cập nhật thông tin mua sắm & bảo hành thành công.' });
+      load();
+    } catch (err: any) {
+      setMsg({ type: 'err', text: err.response?.data?.message || 'Không thể cập nhật thông tin mua sắm.' });
+    } finally {
+      setSavingPurchase(false);
+    }
+  };
+
+  const handleSaveNotes = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!asset) return;
+    setSavingNotes(true);
+    setMsg(null);
+    try {
+      await api.patch(`/assets/${asset.id}`, {
+        notes: notesDraft,
+        reason: 'Cập nhật ghi chú tài sản',
+      });
+      setMsg({ type: 'ok', text: 'Đã lưu ghi chú tài sản thành công.' });
+      load();
+    } catch (err: any) {
+      setMsg({ type: 'err', text: err.response?.data?.message || 'Không thể lưu ghi chú.' });
+    } finally {
+      setSavingNotes(false);
+    }
+  };
+
+  const appendNoteTemplate = (snippet: string) => {
+    setNotesDraft((prev) => (prev.trim() ? `${prev.trimEnd()}\n${snippet}` : snippet));
+  };
+
+  useEffect(() => {
+    if (!msg) return;
+    const t = window.setTimeout(() => setMsg(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [msg]);
+
+  // Pagination hooks for all list tables (must be called unconditionally before early returns)
+  const agent = asset?.agents?.[0] || null;
+  const latestSnap = agent?.snapshots?.[0] || null;
+  const softwarePg = usePagination<any>(latestSnap?.software || [], 10);
+  const docsPg = usePagination<any>(asset?.documents || [], 10);
+  const changesPg = usePagination<any>(asset?.deviceChanges || [], 10);
+  const transfersPg = usePagination<any>(asset?.transfers || [], 10);
+  const assignmentsPg = usePagination<any>(asset?.assignments || [], 10);
+  const maintenancesPg = usePagination<any>(asset?.maintenances || [], 10);
+  const inventoryPg = usePagination<any>(asset?.inventoryItems || [], 10);
+  const auditPg = usePagination<any>(asset?.auditLogs || [], 10);
 
   if (loading && !asset) {
     return <div className="py-12 text-center text-sm text-ink-secondary">Đang tải hồ sơ tài sản...</div>;
@@ -78,8 +221,6 @@ export const AssetDetailPage: React.FC = () => {
     return <div className="py-12 text-center text-sm text-red-600">Không tìm thấy tài sản.</div>;
   }
 
-  const agent = asset.agents?.[0] || null;
-  const latestSnap = agent?.snapshots?.[0] || null;
   const activeBaseline = asset.baselines?.find((b: any) => b.isActive) || asset.baselines?.[0] || null;
   const baselineObj = activeBaseline?.baselineJson ? JSON.parse(activeBaseline.baselineJson) : null;
   const os = latestSnap?.operatingSystem || null;
@@ -178,6 +319,11 @@ export const AssetDetailPage: React.FC = () => {
               <Edit3 className="w-3.5 h-3.5" /> Điều chỉnh mã
             </button>
           )}
+          {can('transfers.manage') && asset.status !== 'DISPOSED' && (
+            <Link to={`/transfers/new?assetId=${asset.id}`} className="btn-secondary text-xs text-brand">
+              <ArrowLeftRight className="w-3.5 h-3.5" /> Cấp phát / Điều chuyển
+            </Link>
+          )}
           <button onClick={() => setQrOpen(true)} className="btn-primary text-xs">
             <QrCode className="w-3.5 h-3.5" /> Mã QR
           </button>
@@ -258,11 +404,24 @@ export const AssetDetailPage: React.FC = () => {
             </div>
 
             <div className="panel p-5 flex items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <div className="text-xs font-semibold text-ink-primary">Mã QR kiểm kê</div>
-                <div className="font-mono text-xs text-ink-muted mt-0.5">{asset.qrCodeValue || `ITAM:${asset.assetCode}`}</div>
+                <div className="font-mono text-xs text-ink-muted mt-0.5 truncate">{asset.assetCode}</div>
+                <a
+                  href={`${window.location.origin}/qr/${encodeURIComponent(asset.assetCode)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[11px] text-brand hover:underline mt-1 inline-block"
+                >
+                  Mở thẻ QR công khai ↗
+                </a>
               </div>
-              <QRCodeSVG value={asset.qrCodeValue || `ITAM:${asset.assetCode}`} size={68} />
+              <QRCodeSVG
+                value={`${window.location.origin}/qr/${encodeURIComponent(asset.assetCode)}`}
+                size={80}
+                level="M"
+                includeMargin
+              />
             </div>
           </div>
         </div>
@@ -420,12 +579,12 @@ export const AssetDetailPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {(latestSnap?.software || []).length === 0 ? (
+                {softwarePg.totalItems === 0 ? (
                   <tr><td colSpan={7} className="td-cell text-center text-ink-muted py-8">Không có dữ liệu phần mềm.</td></tr>
                 ) : (
-                  latestSnap.software.map((sw: any, idx: number) => (
+                  softwarePg.paginated.map((sw: any, idx: number) => (
                     <tr key={sw.id} className={sw.isUnauthorized ? 'bg-red-50/50' : ''}>
-                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
+                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{softwarePg.startIndex + idx + 1}</td>
                       <td className="td-cell font-medium">{sw.displayName}</td>
                       <td className="td-cell text-xs text-ink-secondary">{sw.publisher || '—'}</td>
                       <td className="td-cell font-mono text-xs">{sw.displayVersion || '—'}</td>
@@ -444,6 +603,14 @@ export const AssetDetailPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            totalItems={softwarePg.totalItems}
+            page={softwarePg.page}
+            pageSize={softwarePg.pageSize}
+            onPageChange={softwarePg.setPage}
+            onPageSizeChange={softwarePg.setPageSize}
+            unitLabel="phần mềm"
+          />
         </div>
       )}
 
@@ -480,11 +647,119 @@ export const AssetDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 5: MUA SẮM */}
+      {/* TAB 5: MUA SẮM & HỒ SƠ ĐÍNH KÈM */}
       {tab === 'purchase' && (
+        <div className="space-y-4">
         <div className="panel p-5">
-          <h2 className="text-sm font-semibold border-b border-line pb-2.5 mb-4">Thông tin mua sắm & bảo hành</h2>
-          {asset.purchase ? (
+          <div className="flex items-center justify-between gap-2 border-b border-line pb-2.5 mb-4">
+            <h2 className="text-sm font-semibold">Thông tin mua sắm & bảo hành</h2>
+            {can('assets.update') && !editingPurchase && (
+              <button type="button" onClick={openPurchaseEdit} className="btn-secondary px-2.5 py-1 text-xs">
+                <Edit3 className="w-3.5 h-3.5" /> Cập nhật thông tin mua sắm
+              </button>
+            )}
+          </div>
+
+          {editingPurchase ? (
+            <form onSubmit={handleSavePurchase} className="space-y-4">
+              <div className="grid sm:grid-cols-3 gap-3.5">
+                <div>
+                  <label className="label-field">Nhà cung cấp</label>
+                  <select
+                    value={purchaseForm.supplierId}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, supplierId: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="">-- Chọn nhà cung cấp --</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="label-field">Số hợp đồng</label>
+                  <input
+                    value={purchaseForm.contractNumber}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, contractNumber: e.target.value })}
+                    className="input-field font-mono"
+                    placeholder="Nhập số hợp đồng"
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Số hóa đơn</label>
+                  <input
+                    value={purchaseForm.invoiceNumber}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, invoiceNumber: e.target.value })}
+                    className="input-field font-mono"
+                    placeholder="Nhập số hóa đơn"
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Giá mua (VNĐ)</label>
+                  <CurrencyInput
+                    value={purchaseForm.purchasePrice}
+                    onChange={(val) => setPurchaseForm({ ...purchaseForm, purchasePrice: val })}
+                    placeholder="Nhập giá mua"
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Nguồn kinh phí</label>
+                  <input
+                    value={purchaseForm.fundingSource}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, fundingSource: e.target.value })}
+                    className="input-field"
+                    placeholder="Nhập nguồn kinh phí"
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Ngày mua</label>
+                  <DateInputVN
+                    value={purchaseForm.purchaseDate}
+                    onChange={(iso) => setPurchaseForm({ ...purchaseForm, purchaseDate: iso })}
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Ngày đưa vào sử dụng</label>
+                  <DateInputVN
+                    value={purchaseForm.inUseDate}
+                    onChange={(iso) => setPurchaseForm({ ...purchaseForm, inUseDate: iso })}
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Bắt đầu bảo hành</label>
+                  <DateInputVN
+                    value={purchaseForm.warrantyStartDate}
+                    onChange={(iso) => setPurchaseForm({ ...purchaseForm, warrantyStartDate: iso })}
+                  />
+                </div>
+                <div>
+                  <label className="label-field">Kết thúc bảo hành</label>
+                  <DateInputVN
+                    value={purchaseForm.warrantyEndDate}
+                    onChange={(iso) => setPurchaseForm({ ...purchaseForm, warrantyEndDate: iso })}
+                  />
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="label-field">Ghi chú mua sắm / bảo hành</label>
+                  <textarea
+                    rows={2}
+                    value={purchaseForm.notes}
+                    onChange={(e) => setPurchaseForm({ ...purchaseForm, notes: e.target.value })}
+                    className="input-field"
+                    placeholder="Điều kiện bảo hành, đầu mối hỗ trợ NCC..."
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-2 border-t border-line">
+                <button type="button" onClick={() => setEditingPurchase(false)} className="btn-secondary">
+                  Hủy
+                </button>
+                <button type="submit" disabled={savingPurchase} className="btn-primary">
+                  <Save className="w-4 h-4" /> {savingPurchase ? 'Đang lưu...' : 'Lưu thông tin mua sắm'}
+                </button>
+              </div>
+            </form>
+          ) : asset.purchase ? (
             <div className="grid sm:grid-cols-3 gap-4 text-sm">
               <div><span className="text-xs text-ink-muted block">Nhà cung cấp</span><span className="font-medium">{asset.purchase.supplier?.name || '—'}</span></div>
               <div><span className="text-xs text-ink-muted block">Số hợp đồng</span><span className="font-mono">{asset.purchase.contractNumber || '—'}</span></div>
@@ -494,18 +769,37 @@ export const AssetDetailPage: React.FC = () => {
               <div><span className="text-xs text-ink-muted block">Ngày mua / Đưa vào sử dụng</span><span>{formatDate(asset.purchase.purchaseDate)} / {formatDate(asset.purchase.inUseDate)}</span></div>
               <div><span className="text-xs text-ink-muted block">Bắt đầu bảo hành</span><span>{formatDate(asset.purchase.warrantyStartDate)}</span></div>
               <div><span className="text-xs text-ink-muted block">Kết thúc bảo hành</span><span className="font-medium">{formatDate(asset.purchase.warrantyEndDate)}</span></div>
+              {asset.purchase.notes && (
+                <div className="sm:col-span-3 pt-2 border-t border-line">
+                  <span className="text-xs text-ink-muted block">Ghi chú mua sắm</span>
+                  <span className="text-xs text-ink-secondary whitespace-pre-wrap">{asset.purchase.notes}</span>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-sm text-ink-muted">Chưa cập nhật thông tin mua sắm.</p>
           )}
         </div>
-      )}
 
-      {/* TAB 6: HỒ SƠ ĐÍNH KÈM (REAL FILE UPLOAD & DOWNLOAD) */}
-      {tab === 'documents' && (
-        <div className="space-y-4">
-          {can('assets.documents') && (
-            <form onSubmit={handleUploadDoc} className="panel p-4 flex flex-wrap items-end gap-3">
+        {/* HỒ SƠ ĐÍNH KÈM (REAL FILE UPLOAD & DOWNLOAD) */}
+        <div className="panel overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-line flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-ink-primary">
+              Hồ sơ &amp; Chứng từ đính kèm ({asset.documents?.length || 0})
+            </h3>
+            {can('assets.documents') && (
+              <button
+                type="button"
+                onClick={() => setShowDocUpload((v) => !v)}
+                className={showDocUpload ? 'btn-secondary px-2.5 py-1 text-xs' : 'btn-primary px-2.5 py-1 text-xs'}
+              >
+                <Upload className="w-3.5 h-3.5" /> {showDocUpload ? 'Đóng khung tải lên' : 'Cập nhật hồ sơ'}
+              </button>
+            )}
+          </div>
+
+          {can('assets.documents') && showDocUpload && (
+            <form onSubmit={handleUploadDoc} className="p-4 bg-slate-50/80 border-b border-line flex flex-wrap items-end gap-3">
               <div>
                 <label className="label-field">Loại hồ sơ</label>
                 <select value={docType} onChange={(e) => setDocType(e.target.value)} className="input-field w-48">
@@ -534,7 +828,7 @@ export const AssetDetailPage: React.FC = () => {
             </form>
           )}
 
-          <div className="panel overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
@@ -547,12 +841,12 @@ export const AssetDetailPage: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {(asset.documents || []).length === 0 ? (
+                {docsPg.totalItems === 0 ? (
                   <tr><td colSpan={6} className="td-cell text-center text-ink-muted py-8">Chưa có hồ sơ đính kèm.</td></tr>
                 ) : (
-                  asset.documents.map((doc: any, idx: number) => (
+                  docsPg.paginated.map((doc: any, idx: number) => (
                     <tr key={doc.id}>
-                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
+                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{docsPg.startIndex + idx + 1}</td>
                       <td className="td-cell text-xs font-medium">{DOC_TYPE_LABELS[doc.docType] || doc.docType}</td>
                       <td className="td-cell">
                         <div className="text-sm font-medium">{doc.originalName}</div>
@@ -581,6 +875,15 @@ export const AssetDetailPage: React.FC = () => {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            totalItems={docsPg.totalItems}
+            page={docsPg.page}
+            pageSize={docsPg.pageSize}
+            onPageChange={docsPg.setPage}
+            onPageSizeChange={docsPg.setPageSize}
+            unitLabel="hồ sơ"
+          />
+        </div>
         </div>
       )}
 
@@ -600,12 +903,12 @@ export const AssetDetailPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {(asset.deviceChanges || []).length === 0 ? (
+              {changesPg.totalItems === 0 ? (
                 <tr><td colSpan={7} className="td-cell text-center text-ink-muted py-8">Chưa ghi nhận thay đổi cấu hình nào.</td></tr>
               ) : (
-                asset.deviceChanges.map((ch: any, idx: number) => (
+                changesPg.paginated.map((ch: any, idx: number) => (
                   <tr key={ch.id}>
-                    <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
+                    <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{changesPg.startIndex + idx + 1}</td>
                     <td className="td-cell text-xs">{formatDateTime(ch.detectedAt)}</td>
                     <td className="td-cell font-semibold text-xs">{ch.component}</td>
                     <td className="td-cell text-xs text-slate-500">{ch.previousValue}</td>
@@ -637,6 +940,14 @@ export const AssetDetailPage: React.FC = () => {
               )}
             </tbody>
           </table>
+          <TablePagination
+            totalItems={changesPg.totalItems}
+            page={changesPg.page}
+            pageSize={changesPg.pageSize}
+            onPageChange={changesPg.setPage}
+            onPageSizeChange={changesPg.setPageSize}
+            unitLabel="thay đổi"
+          />
         </div>
       )}
 
@@ -644,44 +955,162 @@ export const AssetDetailPage: React.FC = () => {
       {tab === 'transfers' && (
         <div className="space-y-4">
           <div className="panel overflow-hidden">
-            <div className="px-4 py-3 border-b border-line text-sm font-semibold">Lịch sử điều chuyển ({asset.transfers?.length || 0})</div>
+            <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">Lịch sử điều chuyển & thu hồi ({asset.transfers?.length || 0})</span>
+              {can('transfers.manage') && asset.status !== 'DISPOSED' && (
+                <Link to={`/transfers/new?assetId=${asset.id}`} className="btn-secondary px-2.5 py-1 text-xs text-brand">
+                  <ArrowLeftRight className="w-3.5 h-3.5" /> Lập phiếu mới
+                </Link>
+              )}
+            </div>
             <table className="w-full">
-              <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Mã phiếu</th><th className="th-cell">Từ phòng ban / Người dùng</th><th className="th-cell">Đến phòng ban / Người dùng</th><th className="th-cell">Lý do</th><th className="th-cell">Ngày</th></tr></thead>
+              <thead>
+                <tr>
+                  <th className="th-cell w-12 text-center">STT</th>
+                  <th className="th-cell">Mã phiếu</th>
+                  <th className="th-cell">Từ phòng ban / Người dùng</th>
+                  <th className="th-cell">Đến phòng ban / Người dùng</th>
+                  <th className="th-cell">Lý do</th>
+                  <th className="th-cell">Ngày</th>
+                  <th className="th-cell text-right">Biên bản</th>
+                </tr>
+              </thead>
               <tbody>
-                {(asset.transfers || []).length === 0 ? (
-                  <tr><td colSpan={6} className="td-cell text-center text-ink-muted py-6">Chưa có lịch sử điều chuyển.</td></tr>
+                {transfersPg.totalItems === 0 ? (
+                  <tr><td colSpan={7} className="td-cell text-center text-ink-muted py-6">Chưa có lịch sử điều chuyển hoặc thu hồi.</td></tr>
                 ) : (
-                  asset.transfers.map((tr: any, idx: number) => (
-                    <tr key={tr.id}>
-                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
-                      <td className="td-cell font-mono text-xs font-semibold">{tr.transferCode}</td>
-                      <td className="td-cell text-xs">{tr.fromDepartment?.name || 'Kho'} / {tr.fromUserName || '—'}</td>
-                      <td className="td-cell text-xs font-medium">{tr.toDepartment?.name || 'Kho'} / {tr.toUserName || '—'}</td>
-                      <td className="td-cell text-xs">{tr.reason}</td>
-                      <td className="td-cell text-xs">{formatDate(tr.transferDate)}</td>
+                  transfersPg.paginated.map((tr: any, idx: number) => {
+                    const isReturn = !tr.toDepartmentId && (!tr.toUserName || tr.toUserName === 'Kho IT');
+                    return (
+                      <tr key={tr.id} className="hover:bg-slate-50/70">
+                        <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{transfersPg.startIndex + idx + 1}</td>
+                        <td className="td-cell font-mono text-xs font-semibold">{tr.transferCode}</td>
+                        <td className="td-cell text-xs">{tr.fromDepartment?.name || 'Kho'} / {tr.fromUserName || '—'}</td>
+                        <td className="td-cell text-xs font-medium">{tr.toDepartment?.name || 'Kho'} / {tr.toUserName || '—'}</td>
+                        <td className="td-cell text-xs">{tr.reason}</td>
+                        <td className="td-cell text-xs">{formatDate(tr.transferDate)}</td>
+                        <td className="td-cell text-right">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setReceipt({
+                                kind: isReturn ? 'RETURN' : 'TRANSFER',
+                                code: tr.transferCode,
+                                date: tr.transferDate || tr.createdAt,
+                                companyName: qrConfig?.labelTitle,
+                                orgInfo,
+                                docTemplate,
+                                asset: {
+                                  assetCode: asset.assetCode,
+                                  name: asset.name,
+                                  assetTypeName: asset.assetType?.name,
+                                  serialNumber: asset.serialNumber,
+                                  manufacturer: asset.manufacturer,
+                                  model: asset.model,
+                                },
+                                fromDepartment: tr.fromDepartment?.name || docTemplate?.departmentSubtitle || 'Phòng Công nghệ Thông tin',
+                                toDepartment: isReturn
+                                  ? (docTemplate?.departmentSubtitle || 'Phòng Công nghệ Thông tin')
+                                  : tr.toDepartment?.name || '—',
+                                handoverBy: tr.handoverBy || '',
+                                receivedBy: tr.receivedBy || '',
+                                reason: tr.reason,
+                                notes: tr.notes || undefined,
+                              })
+                            }
+                            className="btn-secondary px-2.5 py-1 text-xs"
+                            title="Xem & In biên bản"
+                          >
+                            <Printer className="w-3.5 h-3.5" /> Biên bản
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+            <TablePagination
+              totalItems={transfersPg.totalItems}
+              page={transfersPg.page}
+              pageSize={transfersPg.pageSize}
+              onPageChange={transfersPg.setPage}
+              onPageSizeChange={transfersPg.setPageSize}
+              unitLabel="phiếu"
+            />
+          </div>
+          <div className="panel overflow-hidden">
+            <div className="px-4 py-3 border-b border-line text-sm font-semibold">Lịch sử bàn giao ({asset.assignments?.length || 0})</div>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <th className="th-cell w-12 text-center">STT</th>
+                  <th className="th-cell">Mã phiếu</th>
+                  <th className="th-cell">Phòng ban</th>
+                  <th className="th-cell">Người sử dụng</th>
+                  <th className="th-cell">Bàn giao / Tiếp nhận</th>
+                  <th className="th-cell">Ngày bàn giao</th>
+                  <th className="th-cell text-right">Biên bản</th>
+                </tr>
+              </thead>
+              <tbody>
+                {assignmentsPg.totalItems === 0 ? (
+                  <tr><td colSpan={7} className="td-cell text-center text-ink-muted py-6">Chưa có lịch sử bàn giao.</td></tr>
+                ) : (
+                  assignmentsPg.paginated.map((asg: any, idx: number) => (
+                    <tr key={asg.id} className="hover:bg-slate-50/70">
+                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{assignmentsPg.startIndex + idx + 1}</td>
+                      <td className="td-cell font-mono text-xs font-semibold">{asg.assignmentCode}</td>
+                      <td className="td-cell text-xs">{asg.department?.name || '—'}</td>
+                      <td className="td-cell text-xs font-medium">{asg.assigneeName}</td>
+                      <td className="td-cell text-xs">{asg.handoverBy} → {asg.receivedBy}</td>
+                      <td className="td-cell text-xs">{formatDate(asg.handoverDate)}</td>
+                      <td className="td-cell text-right">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setReceipt({
+                              kind: 'HANDOVER',
+                              code: asg.assignmentCode,
+                              date: asg.handoverDate || asg.createdAt,
+                              companyName: qrConfig?.labelTitle,
+                              orgInfo,
+                              docTemplate,
+                              asset: {
+                                assetCode: asset.assetCode,
+                                name: asset.name,
+                                assetTypeName: asset.assetType?.name,
+                                serialNumber: asset.serialNumber,
+                                manufacturer: asset.manufacturer,
+                                model: asset.model,
+                              },
+                              fromDepartment: docTemplate?.departmentSubtitle || 'Phòng Công nghệ Thông tin',
+                              toDepartment: asg.department?.name || '—',
+                              handoverBy: asg.handoverBy || '',
+                              receivedBy: asg.receivedBy || '',
+                              reason: 'Cấp phát / Bàn giao tài sản cho đơn vị sử dụng',
+                              notes: asg.notes || undefined,
+                            })
+                          }
+                          className="btn-secondary px-2.5 py-1 text-xs"
+                          title="Xem & In biên bản"
+                        >
+                          <Printer className="w-3.5 h-3.5" /> Biên bản
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
               </tbody>
             </table>
-          </div>
-          <div className="panel overflow-hidden">
-            <div className="px-4 py-3 border-b border-line text-sm font-semibold">Lịch sử bàn giao ({asset.assignments?.length || 0})</div>
-            <table className="w-full">
-              <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Mã phiếu</th><th className="th-cell">Phòng ban</th><th className="th-cell">Người sử dụng</th><th className="th-cell">Bàn giao / Tiếp nhận</th><th className="th-cell">Ngày bàn giao</th></tr></thead>
-              <tbody>
-                {(asset.assignments || []).map((asg: any, idx: number) => (
-                  <tr key={asg.id}>
-                    <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
-                    <td className="td-cell font-mono text-xs">{asg.assignmentCode}</td>
-                    <td className="td-cell text-xs">{asg.department?.name || '—'}</td>
-                    <td className="td-cell text-xs font-medium">{asg.assigneeName}</td>
-                    <td className="td-cell text-xs">{asg.handoverBy} → {asg.receivedBy}</td>
-                    <td className="td-cell text-xs">{formatDate(asg.handoverDate)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <TablePagination
+              totalItems={assignmentsPg.totalItems}
+              page={assignmentsPg.page}
+              pageSize={assignmentsPg.pageSize}
+              onPageChange={assignmentsPg.setPage}
+              onPageSizeChange={assignmentsPg.setPageSize}
+              unitLabel="phiếu"
+            />
           </div>
         </div>
       )}
@@ -692,12 +1121,12 @@ export const AssetDetailPage: React.FC = () => {
           <table className="w-full">
             <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Mã phiếu</th><th className="th-cell">Tình trạng / Nội dung</th><th className="th-cell">Đơn vị sửa chữa</th><th className="th-cell">Linh kiện</th><th className="th-cell">Chi phí</th><th className="th-cell">Trạng thái</th></tr></thead>
             <tbody>
-              {(asset.maintenances || []).length === 0 ? (
+              {maintenancesPg.totalItems === 0 ? (
                 <tr><td colSpan={7} className="td-cell text-center text-ink-muted py-8">Chưa có phiếu sửa chữa / bảo trì.</td></tr>
               ) : (
-                asset.maintenances.map((m: any, idx: number) => (
+                maintenancesPg.paginated.map((m: any, idx: number) => (
                   <tr key={m.id}>
-                    <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
+                    <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{maintenancesPg.startIndex + idx + 1}</td>
                     <td className="td-cell font-mono text-xs font-semibold">{m.ticketCode}</td>
                     <td className="td-cell text-xs">
                       <div className="font-medium">{m.issueSummary}</div>
@@ -712,6 +1141,14 @@ export const AssetDetailPage: React.FC = () => {
               )}
             </tbody>
           </table>
+          <TablePagination
+            totalItems={maintenancesPg.totalItems}
+            page={maintenancesPg.page}
+            pageSize={maintenancesPg.pageSize}
+            onPageChange={maintenancesPg.setPage}
+            onPageSizeChange={maintenancesPg.setPageSize}
+            unitLabel="phiếu bảo trì"
+          />
         </div>
       )}
 
@@ -719,16 +1156,16 @@ export const AssetDetailPage: React.FC = () => {
       {tab === 'inventory' && (
         <div className="space-y-4">
           <div className="panel overflow-hidden">
-            <div className="px-4 py-3 border-b border-line text-sm font-semibold">Lịch sử kiểm kê</div>
+            <div className="px-4 py-3 border-b border-line text-sm font-semibold">Lịch sử kiểm kê ({inventoryPg.totalItems})</div>
             <table className="w-full">
               <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Đợt kiểm kê</th><th className="th-cell">Kết quả</th><th className="th-cell">Vị trí / Người dùng thực tế</th><th className="th-cell">Ghi chú</th><th className="th-cell">Người kiểm kê</th></tr></thead>
               <tbody>
-                {(asset.inventoryItems || []).length === 0 ? (
+                {inventoryPg.totalItems === 0 ? (
                   <tr><td colSpan={6} className="td-cell text-center text-ink-muted py-6">Chưa nằm trong đợt kiểm kê nào.</td></tr>
                 ) : (
-                  asset.inventoryItems.map((it: any, idx: number) => (
+                  inventoryPg.paginated.map((it: any, idx: number) => (
                     <tr key={it.id}>
-                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
+                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{inventoryPg.startIndex + idx + 1}</td>
                       <td className="td-cell text-xs font-medium">{it.session?.sessionCode} — {it.session?.name}</td>
                       <td className="td-cell"><InventoryStatusBadge status={it.status} /></td>
                       <td className="td-cell text-xs">{it.actualLocation || '—'} / {it.actualUser || '—'}</td>
@@ -739,26 +1176,98 @@ export const AssetDetailPage: React.FC = () => {
                 )}
               </tbody>
             </table>
+            <TablePagination
+              totalItems={inventoryPg.totalItems}
+              page={inventoryPg.page}
+              pageSize={inventoryPg.pageSize}
+              onPageChange={inventoryPg.setPage}
+              onPageSizeChange={inventoryPg.setPageSize}
+              unitLabel="đợt kiểm kê"
+            />
           </div>
 
           <div className="panel overflow-hidden">
-            <div className="px-4 py-3 border-b border-line text-sm font-semibold">Nhật ký nghiệp vụ tài sản (Audit Log)</div>
+            <div className="px-4 py-3 border-b border-line text-sm font-semibold">Nhật ký nghiệp vụ tài sản (Audit Log — {auditPg.totalItems})</div>
             <table className="w-full">
               <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Thời điểm</th><th className="th-cell">Thao tác</th><th className="th-cell">Trước → Sau</th><th className="th-cell">Lý do</th><th className="th-cell">Người thực hiện</th></tr></thead>
               <tbody>
-                {(asset.auditLogs || []).map((l: any, idx: number) => (
-                  <tr key={l.id}>
-                    <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
-                    <td className="td-cell text-xs">{formatDateTime(l.createdAt)}</td>
-                    <td className="td-cell font-mono text-xs font-semibold">{l.action}</td>
-                    <td className="td-cell text-xs">{l.oldValue ? `${l.oldValue} → ` : ''}{l.newValue || '—'}</td>
-                    <td className="td-cell text-xs text-ink-secondary">{l.reason || '—'}</td>
-                    <td className="td-cell text-xs">{l.actorName || '—'}</td>
-                  </tr>
-                ))}
+                {auditPg.totalItems === 0 ? (
+                  <tr><td colSpan={6} className="td-cell text-center text-ink-muted py-6">Chưa có nhật ký nghiệp vụ.</td></tr>
+                ) : (
+                  auditPg.paginated.map((l: any, idx: number) => (
+                    <tr key={l.id}>
+                      <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{auditPg.startIndex + idx + 1}</td>
+                      <td className="td-cell text-xs">{formatDateTime(l.createdAt)}</td>
+                      <td className="td-cell text-xs font-semibold text-ink-primary">{formatAuditAction(l.action)}</td>
+                      <td className="td-cell text-xs">{l.oldValue ? `${l.oldValue} → ` : ''}{l.newValue || '—'}</td>
+                      <td className="td-cell text-xs text-ink-secondary">{l.reason || '—'}</td>
+                      <td className="td-cell text-xs">{l.actorName || '—'}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
+            <TablePagination
+              totalItems={auditPg.totalItems}
+              page={auditPg.page}
+              pageSize={auditPg.pageSize}
+              onPageChange={auditPg.setPage}
+              onPageSizeChange={auditPg.setPageSize}
+              unitLabel="nhật ký"
+            />
           </div>
+        </div>
+      )}
+
+      {/* TAB 11: GHI CHÚ (REMOTE, KỸ THUẬT, LƯU Ý RIÊNG) */}
+      {tab === 'notes' && (
+        <div className="panel p-5 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2.5">
+            <div className="flex items-center gap-2">
+              <StickyNote className="w-4 h-4 text-brand" />
+              <h2 className="text-sm font-semibold text-ink-primary">Ghi chú kỹ thuật & thông tin Remote</h2>
+            </div>
+            {can('assets.update') && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { label: '+ UltraViewer', text: 'UltraViewer ID:  | Pass: ' },
+                  { label: '+ AnyDesk', text: 'AnyDesk ID: ' },
+                  { label: '+ RustDesk', text: 'RustDesk ID: ' },
+                  { label: '+ IP / RDP', text: 'IP tĩnh / RDP: ' },
+                ].map((tpl) => (
+                  <button
+                    key={tpl.label}
+                    type="button"
+                    onClick={() => appendNoteTemplate(tpl.text)}
+                    className="px-2 py-0.5 rounded-full text-[11px] border border-sky-200 bg-sky-50/70 text-brand hover:bg-sky-100 font-medium"
+                  >
+                    {tpl.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <form onSubmit={handleSaveNotes} className="space-y-3">
+            <textarea
+              rows={10}
+              value={notesDraft}
+              disabled={!can('assets.update')}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              className="input-field font-mono text-xs leading-relaxed"
+              placeholder="Ghi chú thông tin truy cập từ xa (UltraViewer, AnyDesk, RustDesk, RDP), IP tĩnh, cấu hình máy in, lưu ý bảo trì..."
+            />
+            {can('assets.update') && (
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-ink-muted">
+                  Mọi thay đổi ghi chú đều được lưu lịch sử trong tab Kiểm kê &amp; Audit.
+                </span>
+                <button type="submit" disabled={savingNotes} className="btn-primary">
+                  <Save className="w-4 h-4" /> {savingNotes ? 'Đang lưu...' : 'Lưu ghi chú'}
+                </button>
+              </div>
+            )}
+          </form>
         </div>
       )}
 
@@ -792,17 +1301,46 @@ export const AssetDetailPage: React.FC = () => {
 
       {/* QR Modal */}
       <Modal open={qrOpen} onClose={() => setQrOpen(false)} title="Tem nhãn mã QR tài sản" maxWidth="max-w-sm">
-        <div className="text-center space-y-4">
-          <div className="p-5 border-2 border-dashed border-slate-300 rounded-lg inline-block bg-white">
-            <QRCodeSVG value={asset.qrCodeValue || `ITAM:${asset.assetCode}`} size={180} />
-            <div className="mt-3 font-mono text-base font-bold">{asset.assetCode}</div>
-            <div className="text-xs text-ink-secondary max-w-[200px] mx-auto truncate">{asset.name}</div>
+        {(() => {
+          const qrUrl = `${window.location.origin}/qr/${encodeURIComponent(asset.assetCode)}`;
+          return (
+            <div className="text-center space-y-4">
+              <AssetQrLabel asset={asset} config={qrConfig} />
+              <div className="no-print text-[11px] text-ink-muted space-y-1">
+                <div>Quét bằng camera điện thoại để xem ngay thẻ thông tin tài sản.</div>
+                <a href={qrUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline font-medium inline-block">
+                  Mở trang xem trước tem QR ↗
+                </a>
+              </div>
+              <div className="no-print flex justify-center gap-2">
+                <button onClick={() => window.print()} className="btn-primary"><Printer className="w-4 h-4" /> In tem QR</button>
+                <button onClick={() => setQrOpen(false)} className="btn-secondary">Đóng</button>
+              </div>
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* Printable Handover / Transfer / Return Receipt Modal */}
+      <Modal
+        open={!!receipt}
+        onClose={() => setReceipt(null)}
+        title={receipt ? `Biên bản chứng từ — ${receipt.code}` : 'Biên bản bàn giao / điều chuyển'}
+        maxWidth="max-w-4xl"
+      >
+        {receipt && (
+          <div className="space-y-4">
+            <div className="no-print flex justify-end gap-2">
+              <button type="button" onClick={() => window.print()} className="btn-primary">
+                <Printer className="w-4 h-4" /> In biên bản / Lưu PDF
+              </button>
+              <button type="button" onClick={() => setReceipt(null)} className="btn-secondary">
+                Đóng
+              </button>
+            </div>
+            <HandoverReceipt data={receipt} />
           </div>
-          <div className="no-print flex justify-center gap-2">
-            <button onClick={() => window.print()} className="btn-primary"><Printer className="w-4 h-4" /> In tem QR</button>
-            <button onClick={() => setQrOpen(false)} className="btn-secondary">Đóng</button>
-          </div>
-        </div>
+        )}
       </Modal>
     </div>
   );

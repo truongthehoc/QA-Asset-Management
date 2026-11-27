@@ -13,9 +13,23 @@ import {
   AlertCircle,
   Clock,
   Radar,
+  QrCode,
+  Building2,
+  FileText,
+  Upload,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { PageHeader, Badge } from '../../components/UiPrimitives';
+import { AssetQrLabel, QR_FIELD_OPTIONS } from '../../components/AssetQrLabel';
+
+const DOC_HEADER_FIELD_OPTIONS: Array<{ key: string; label: string }> = [
+  { key: 'logo', label: 'Logo đơn vị' },
+  { key: 'name', label: 'Tên đơn vị' },
+  { key: 'address', label: 'Địa chỉ đơn vị' },
+  { key: 'taxCode', label: 'Mã số thuế' },
+  { key: 'departmentSubtitle', label: 'Bộ phận phụ trách' },
+  { key: 'nationalMotto', label: 'Quốc hiệu & Tiêu ngữ' },
+];
 
 interface GroupConfig {
   id: string;
@@ -27,11 +41,32 @@ interface GroupConfig {
 
 const GROUP_LIST: GroupConfig[] = [
   {
+    id: 'ORG_INFO',
+    shortTitle: 'Thông tin đơn vị',
+    title: 'Thông tin đơn vị / Doanh nghiệp',
+    desc: 'Cập nhật tên đơn vị, địa chỉ, mã số thuế và logo để hiển thị đồng bộ trên các biên bản bàn giao, điều chuyển, thu hồi.',
+    icon: Building2,
+  },
+  {
+    id: 'DOCUMENT_TEMPLATE',
+    shortTitle: 'Biểu mẫu',
+    title: 'Cấu hình biểu mẫu biên bản',
+    desc: 'Tùy chỉnh các thông tin đơn vị sẽ hiển thị ở phần đầu của các biên bản bàn giao, điều chuyển và thu hồi tài sản.',
+    icon: FileText,
+  },
+  {
     id: 'ASSET_CODE',
     shortTitle: 'Quy tắc mã tài sản',
     title: 'Quy tắc thiết lập & sinh mã tài sản',
     desc: 'Cấu hình cấu trúc sinh mã tự động và tùy chọn cho phép nhập mã thủ công.',
     icon: Hash,
+  },
+  {
+    id: 'QR_LABEL',
+    shortTitle: 'Tem mã QR tài sản',
+    title: 'Cấu hình tem mã QR & thẻ tra cứu nhanh',
+    desc: 'Tùy chỉnh tiêu đề tem, kích thước mã QR và các thông tin tài sản hiển thị khi in tem hoặc quét QR.',
+    icon: QrCode,
   },
   {
     id: 'AGENT_SCHEDULE',
@@ -66,7 +101,7 @@ const GROUP_LIST: GroupConfig[] = [
 interface FieldMeta {
   label: string;
   help: string;
-  kind: 'text' | 'number' | 'boolean' | 'padding' | 'keywords' | 'pattern';
+  kind: 'text' | 'number' | 'boolean' | 'padding' | 'keywords' | 'pattern' | 'qr_size' | 'qr_fields' | 'logo' | 'doc_fields';
   unit?: string;
   min?: number;
   max?: number;
@@ -154,6 +189,51 @@ const FIELD_META: Record<string, FieldMeta> = {
     help: 'Tắt khi triển khai trên VPS/Cloud (chỉ dùng Windows Agent và nhập thủ công). Bật khi triển khai máy chủ trong mạng nội bộ công ty.',
     kind: 'boolean',
   },
+  'qr.label_title': {
+    label: 'Tiêu đề hiển thị trên đầu tem QR',
+    help: 'Tên công ty hoặc nhãn chung in phía trên mã QR (để trống nếu không muốn hiển thị).',
+    kind: 'text',
+  },
+  'qr.size_px': {
+    label: 'Kích thước mã QR khi in tem',
+    help: 'Chọn kích thước phù hợp với khổ giấy in tem nhãn tài sản của đơn vị.',
+    kind: 'qr_size',
+  },
+  'qr.fields': {
+    label: 'Các thông tin tài sản hiển thị trên tem QR',
+    help: 'Tích chọn những trường thông tin sẽ hiển thị trên tem in và trang tra cứu khi quét mã QR.',
+    kind: 'qr_fields',
+  },
+  'org.name': {
+    label: 'Tên đơn vị / Công ty',
+    help: 'Tên đầy đủ của đơn vị được in trên tiêu đề các biên bản bàn giao, điều chuyển, thu hồi.',
+    kind: 'text',
+  },
+  'org.address': {
+    label: 'Địa chỉ đơn vị',
+    help: 'Địa chỉ trụ sở hoặc văn phòng của đơn vị.',
+    kind: 'text',
+  },
+  'org.tax_code': {
+    label: 'Mã số thuế',
+    help: 'Mã số thuế doanh nghiệp / đơn vị.',
+    kind: 'text',
+  },
+  'org.logo_url': {
+    label: 'Logo đơn vị',
+    help: 'Tải lên ảnh logo (PNG/JPG/SVG/WEBP, tối đa 5MB) hoặc dán đường dẫn ảnh.',
+    kind: 'logo',
+  },
+  'doc.department_subtitle': {
+    label: 'Tên bộ phận phụ trách trên biên bản',
+    help: 'Dòng mô tả phòng ban/bộ phận hiển thị bên dưới tên đơn vị trên các biên bản.',
+    kind: 'text',
+  },
+  'doc.header_fields': {
+    label: 'Thông tin đơn vị hiển thị trên các biên bản',
+    help: 'Tích chọn những thông tin đơn vị sẽ xuất hiện ở phần tiêu đề các biên bản bàn giao, điều chuyển, thu hồi.',
+    kind: 'doc_fields',
+  },
 };
 
 function formatDurationHuman(secondsRaw: string): string {
@@ -171,9 +251,10 @@ function formatDurationHuman(secondsRaw: string): string {
 export const SettingsPage: React.FC = () => {
   const [original, setOriginal] = useState<any[]>([]);
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [selectedGroup, setSelectedGroup] = useState<string>('ASSET_CODE');
+  const [selectedGroup, setSelectedGroup] = useState<string>('ORG_INFO');
   const [newKeyword, setNewKeyword] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const load = async () => {
@@ -188,6 +269,12 @@ export const SettingsPage: React.FC = () => {
   useEffect(() => {
     load();
   }, []);
+
+  useEffect(() => {
+    if (!feedback) return;
+    const t = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [feedback]);
 
   const changedKeys = original.filter((s) => draft[s.key] !== s.value).map((s) => s.key);
   const isDirty = changedKeys.length > 0;
@@ -243,7 +330,15 @@ export const SettingsPage: React.FC = () => {
       icon: Sliders,
     };
   const ActiveIcon = activeGroupMeta.icon;
-  const groupItems = original.filter((s) => (s.group || 'GENERAL') === selectedGroup);
+  const ORG_ORDER: Record<string, number> = {
+    'org.name': 1,
+    'org.address': 2,
+    'org.tax_code': 3,
+    'org.logo_url': 4,
+  };
+  const groupItems = original
+    .filter((s) => (s.group || 'GENERAL') === selectedGroup)
+    .sort((a, b) => (ORG_ORDER[a.key] ?? 99) - (ORG_ORDER[b.key] ?? 99));
 
   // Keyword helpers for SECURITY group
   const keywordsList = (draft['software.unauthorized_keywords'] || '')
@@ -386,17 +481,6 @@ export const SettingsPage: React.FC = () => {
                 {activeGroupMeta.desc}
               </p>
             </div>
-            <div className="hidden sm:flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={!isDirty || saving}
-                className="btn-primary px-3 py-1.5 text-xs"
-              >
-                <Save className="w-3.5 h-3.5" />
-                {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
-              </button>
-            </div>
           </div>
 
           {/* Special Rich View for SECURITY Keywords vs Structured Table for other groups */}
@@ -453,7 +537,7 @@ export const SettingsPage: React.FC = () => {
                   <tr>
                     <th className="th-cell w-12 text-center">STT</th>
                     <th className="th-cell">Tham số cấu hình</th>
-                    <th className="th-cell w-80">Giá trị thiết lập</th>
+                    <th className="th-cell w-[52%] min-w-[440px]">Giá trị thiết lập</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -513,6 +597,162 @@ export const SettingsPage: React.FC = () => {
                               <option value="5">5 chữ số</option>
                               <option value="6">6 chữ số</option>
                             </select>
+                          ) : meta.kind === 'qr_size' ? (
+                            <select
+                              value={val || '180'}
+                              onChange={(e) => updateValue(s.key, e.target.value)}
+                              className="input-field max-w-[220px]"
+                            >
+                              <option value="140">Nhỏ (140 px)</option>
+                              <option value="180">Tiêu chuẩn (180 px)</option>
+                              <option value="220">Lớn (220 px)</option>
+                            </select>
+                          ) : meta.kind === 'qr_fields' ? (
+                            (() => {
+                              const selectedFields = new Set(
+                                (val || '')
+                                  .split(',')
+                                  .map((x) => x.trim())
+                                  .filter(Boolean),
+                              );
+                              const toggleField = (fieldKey: string) => {
+                                const next = new Set(selectedFields);
+                                if (next.has(fieldKey)) next.delete(fieldKey);
+                                else next.add(fieldKey);
+                                const ordered = QR_FIELD_OPTIONS.map((o) => o.key).filter((k) => next.has(k));
+                                updateValue(s.key, ordered.join(','));
+                              };
+                              return (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-[460px]">
+                                  {QR_FIELD_OPTIONS.map((opt) => {
+                                    const checked = selectedFields.has(opt.key);
+                                    return (
+                                      <label
+                                        key={opt.key}
+                                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors whitespace-nowrap ${
+                                          checked
+                                            ? 'bg-sky-50/80 border-sky-300 text-ink-primary font-medium'
+                                            : 'bg-white border-line text-ink-secondary hover:bg-slate-50'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() => toggleField(opt.key)}
+                                        />
+                                        <span>{opt.label}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()
+                          ) : meta.kind === 'doc_fields' ? (
+                            (() => {
+                              const selectedFields = new Set(
+                                (val || '')
+                                  .split(',')
+                                  .map((x) => x.trim())
+                                  .filter(Boolean),
+                              );
+                              const toggleField = (fieldKey: string) => {
+                                const next = new Set(selectedFields);
+                                if (next.has(fieldKey)) next.delete(fieldKey);
+                                else next.add(fieldKey);
+                                const ordered = DOC_HEADER_FIELD_OPTIONS.map((o) => o.key).filter((k) => next.has(k));
+                                updateValue(s.key, ordered.join(','));
+                              };
+                              return (
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-[460px]">
+                                  {DOC_HEADER_FIELD_OPTIONS.map((opt) => {
+                                    const checked = selectedFields.has(opt.key);
+                                    return (
+                                      <label
+                                        key={opt.key}
+                                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors whitespace-nowrap ${
+                                          checked
+                                            ? 'bg-sky-50/80 border-sky-300 text-ink-primary font-medium'
+                                            : 'bg-white border-line text-ink-secondary hover:bg-slate-50'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() => toggleField(opt.key)}
+                                        />
+                                        <span>{opt.label}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()
+                          ) : meta.kind === 'logo' ? (
+                            <div className="space-y-2.5">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                {val ? (
+                                  <div className="h-14 w-28 rounded-lg border border-line bg-white p-1.5 flex items-center justify-center overflow-hidden">
+                                    <img src={val} alt="Logo đơn vị" className="max-h-full max-w-full object-contain" />
+                                  </div>
+                                ) : (
+                                  <div className="h-14 w-28 rounded-lg border border-dashed border-slate-300 bg-slate-50 flex items-center justify-center text-[11px] text-ink-muted">
+                                    Chưa có logo
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2">
+                                  <label className="btn-secondary text-xs cursor-pointer">
+                                    <Upload className="w-3.5 h-3.5" /> {uploadingLogo ? 'Đang tải lên...' : 'Tải ảnh logo'}
+                                    <input
+                                      type="file"
+                                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                                      className="hidden"
+                                      disabled={uploadingLogo}
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        if (file.size > 5 * 1024 * 1024) {
+                                          setFeedback({ type: 'err', text: 'Ảnh logo vượt quá 5MB. Vui lòng chọn ảnh nhẹ hơn.' });
+                                          return;
+                                        }
+                                        setUploadingLogo(true);
+                                        try {
+                                          const fd = new FormData();
+                                          fd.append('file', file);
+                                          const res = await api.post('/admin/settings/org-logo', fd, {
+                                            headers: { 'Content-Type': 'multipart/form-data' },
+                                          });
+                                          updateValue(s.key, res.data.url);
+                                          setFeedback({ type: 'ok', text: 'Đã tải ảnh logo lên máy chủ. Bấm "Lưu cấu hình" để áp dụng.' });
+                                        } catch (err: any) {
+                                          setFeedback({
+                                            type: 'err',
+                                            text: err.response?.data?.message || 'Không thể tải ảnh logo lên máy chủ.',
+                                          });
+                                        } finally {
+                                          setUploadingLogo(false);
+                                          e.target.value = '';
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                  {val && (
+                                    <button
+                                      type="button"
+                                      onClick={() => updateValue(s.key, '')}
+                                      className="btn-secondary text-xs text-red-600 hover:bg-red-50"
+                                    >
+                                      <X className="w-3.5 h-3.5" /> Xóa logo
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <input
+                                value={val.startsWith('data:') ? '' : val}
+                                onChange={(e) => updateValue(s.key, e.target.value)}
+                                className="input-field text-xs"
+                                placeholder="Hoặc dán đường dẫn URL ảnh logo (https://...)"
+                              />
+                            </div>
                           ) : meta.kind === 'pattern' ? (
                             <div className="space-y-2">
                               <input
@@ -579,6 +819,95 @@ export const SettingsPage: React.FC = () => {
                   <span className="font-mono text-sm font-semibold text-brand bg-white px-3.5 py-1 rounded border border-sky-200">
                     {codePreview}
                   </span>
+                </div>
+              )}
+              {selectedGroup === 'DOCUMENT_TEMPLATE' && (() => {
+                const headerSet = new Set(
+                  (draft['doc.header_fields'] || 'logo,name,address,taxCode,departmentSubtitle,nationalMotto')
+                    .split(',')
+                    .map((x) => x.trim())
+                    .filter(Boolean),
+                );
+                const orgName = draft['org.name'] || 'TÊN ĐƠN VỊ / CÔNG TY';
+                const orgAddress = draft['org.address'] || 'Địa chỉ trụ sở đơn vị';
+                const orgTax = draft['org.tax_code'] || '0123456789';
+                const orgLogo = draft['org.logo_url'] || '';
+                const deptSub = draft['doc.department_subtitle'] || 'Phòng Công nghệ Thông tin';
+                return (
+                  <div className="px-5 py-5 bg-[#E6F4F9]/50 border-t border-line space-y-2.5">
+                    <div className="text-xs font-medium text-ink-secondary">
+                      Xem trước phần đầu Biên bản bàn giao / điều chuyển theo cấu hình hiện tại:
+                    </div>
+                    <div className="bg-white border border-slate-300 rounded-lg p-4 max-w-3xl">
+                      <div className="grid grid-cols-2 gap-4 pb-2">
+                        <div className="flex items-start gap-3">
+                          {headerSet.has('logo') && orgLogo && (
+                            <img src={orgLogo} alt="Logo" className="h-11 w-16 object-contain shrink-0" />
+                          )}
+                          <div className="text-left min-w-0">
+                            {headerSet.has('name') && (
+                              <div className="text-xs font-bold uppercase text-slate-900">{orgName}</div>
+                            )}
+                            {headerSet.has('departmentSubtitle') && deptSub && (
+                              <div className="text-[11px] text-slate-600 mt-0.5">{deptSub}</div>
+                            )}
+                            {headerSet.has('address') && (
+                              <div className="text-[11px] text-slate-500 mt-0.5">Đ/c: {orgAddress}</div>
+                            )}
+                            {headerSet.has('taxCode') && (
+                              <div className="text-[11px] font-mono text-slate-500">MST: {orgTax}</div>
+                            )}
+                            <div className="text-[11px] font-mono text-slate-700 mt-1">
+                              Số biên bản: <strong>BG-2026-00001</strong>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <div className="text-center">
+                            {headerSet.has('nationalMotto') && (
+                              <>
+                                <div className="text-xs font-bold uppercase text-slate-800">CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</div>
+                                <div className="text-[11px] font-semibold text-slate-700 mt-0.5">Độc lập - Tự do - Hạnh phúc</div>
+                                <div className="w-28 border-b border-slate-700 mx-auto mt-1" />
+                              </>
+                            )}
+                            <div className="text-[11px] italic text-slate-600 mt-1.5">Ngày 27 tháng 11 năm 2026</div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-center pt-3">
+                        <div className="text-sm font-bold uppercase text-slate-900">BIÊN BẢN BÀN GIAO TÀI SẢN</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {selectedGroup === 'QR_LABEL' && (
+                <div className="px-5 py-5 bg-[#E6F4F9]/50 border-t border-line flex flex-col items-center gap-2.5">
+                  <div className="text-xs font-medium text-ink-secondary">
+                    Xem trước tem mã QR theo cấu hình hiện tại:
+                  </div>
+                  <AssetQrLabel
+                    asset={{
+                      assetCode: codePreview,
+                      name: 'Máy tính trạm Dell OptiPlex 7010',
+                      assetType: { name: 'Máy tính để bàn (Desktop)' },
+                      serialNumber: 'DL-7010-98234',
+                      usingDepartment: { name: 'Phòng Công nghệ Thông tin' },
+                      assignedEmployee: { code: 'NV001', fullName: 'Nguyễn Văn A' },
+                      location: { name: 'Tầng 3 - Khu CNTT' },
+                      handoverDate: new Date().toISOString(),
+                      purchase: { warrantyEndDate: new Date(Date.now() + 365 * 86400_000).toISOString() },
+                    }}
+                    config={{
+                      labelTitle: draft['qr.label_title'] ?? 'TÀI SẢN CNTT',
+                      sizePx: Number(draft['qr.size_px']) || 180,
+                      fields: (draft['qr.fields'] || '')
+                        .split(',')
+                        .map((x) => x.trim())
+                        .filter(Boolean),
+                    }}
+                  />
                 </div>
               )}
             </div>

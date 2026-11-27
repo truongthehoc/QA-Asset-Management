@@ -106,3 +106,14 @@ export class AssetsController {
     return this.assetsService.uploadDocument(id, file, body.docType || 'OTHER', body.notes || '', user);
   }
 }
+
+@ApiTags('Public Asset QR')
+@Controller('api/v1/public/assets')
+export class PublicAssetsController {
+  constructor(private readonly assetsService: AssetsService) {}
+
+  @Get(':code')
+  getPublicByCode(@Param('code') code: string) {
+    return this.assetsService.findPublicByCode(code);
+  }
+}

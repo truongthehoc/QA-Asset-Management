@@ -18,22 +18,53 @@ import {
   ChevronsLeft,
   ChevronsRight,
   X,
+  ArrowLeftRight,
+  UserCheck,
+  RotateCcw,
+  Building2,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, downloadAuthorizedFile } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useAssetStatuses } from '../contexts/AssetStatusContext';
 import { PageHeader, Modal, AssetStatusBadge, AgentStatusBadge } from '../components/UiPrimitives';
+import { AssetQrLabel } from '../components/AssetQrLabel';
 import { formatVnd, formatDate } from '../utils/format';
+
+const QUICK_TRANSFER_REASONS = [
+  'Điều chuyển nhân sự',
+  'Luân chuyển phòng ban',
+  'Nâng cấp / Đổi thiết bị',
+  'Bàn giao sử dụng mới',
+];
+
+const QUICK_RETURN_REASONS = [
+  'Nhân sự nghỉ việc / Thu hồi',
+  'Không còn nhu cầu sử dụng',
+  'Thu hồi về kho kiểm tra / bảo trì',
+  'Đổi sang thiết bị mới',
+];
 
 export const AssetsPage: React.FC = () => {
   const { can } = useAuth();
-  const { statuses: assetStatusList } = useAssetStatuses();
+  const { statuses: assetStatusList, activeStatuses, statusMap } = useAssetStatuses();
+  const getStatusInfo = (code: string) => {
+    const found = statusMap[code];
+    return {
+      label: found?.name || code,
+      bgColor: found?.bgColor || '#F1F5F9',
+      textColor: found?.textColor || '#334155',
+    };
+  };
   const [searchParams] = useSearchParams();
   const [assets, setAssets] = useState<any[]>([]);
   const [allAssets, setAllAssets] = useState<any[]>([]);
-  const [meta, setMeta] = useState<any>({ departments: [], assetTypes: [], locations: [], suppliers: [] });
+  const [meta, setMeta] = useState<any>({ departments: [], assetTypes: [], locations: [], suppliers: [], employees: [] });
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('search') || '');
@@ -48,6 +79,23 @@ export const AssetsPage: React.FC = () => {
 
   // QR Print Modal
   const [qrAsset, setQrAsset] = useState<any>(null);
+
+  // Quick Assign / Transfer / Return Modal
+  const [actionAsset, setActionAsset] = useState<any>(null);
+  const [actionMode, setActionMode] = useState<'HANDOVER' | 'TRANSFER' | 'RETURN'>('HANDOVER');
+  const [actionSaving, setActionSaving] = useState(false);
+  const [actionErr, setActionErr] = useState('');
+  const [empQuery, setEmpQuery] = useState('');
+  const [empDropdownOpen, setEmpDropdownOpen] = useState(false);
+  const empBoxRef = useRef<HTMLDivElement>(null);
+  const [actionForm, setActionForm] = useState({
+    employeeId: '',
+    departmentId: '',
+    locationId: '',
+    locationDetail: '',
+    reason: '',
+    notes: '',
+  });
 
   const loadSummary = async () => {
     try {
@@ -78,6 +126,187 @@ export const AssetsPage: React.FC = () => {
     api.get('/admin/meta').then((r) => setMeta(r.data));
     loadSummary();
   }, []);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (empBoxRef.current && !empBoxRef.current.contains(e.target as Node)) {
+        setEmpDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const employees: any[] = meta.employees || [];
+  const deptNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of meta.departments || []) map.set(d.id, d.name);
+    return map;
+  }, [meta.departments]);
+
+  const selectedEmployee = useMemo(
+    () => employees.find((e) => e.id === actionForm.employeeId) || null,
+    [employees, actionForm.employeeId],
+  );
+
+  const filteredEmployees = useMemo(() => {
+    const q = empQuery.trim().toLowerCase();
+    if (!q) return employees.slice(0, 30);
+    return employees
+      .filter((e) => {
+        const dName = e.department?.name || deptNameById.get(e.departmentId) || '';
+        return (
+          (e.fullName || '').toLowerCase().includes(q) ||
+          (e.code || '').toLowerCase().includes(q) ||
+          dName.toLowerCase().includes(q)
+        );
+      })
+      .slice(0, 30);
+  }, [employees, empQuery, deptNameById]);
+
+  const openActionModal = (asset: any) => {
+    const hasHolder = Boolean(asset.usingDepartmentId || asset.assignedEmployeeId || asset.assignedUserName);
+    setActionAsset(asset);
+    setActionMode(hasHolder ? 'TRANSFER' : 'HANDOVER');
+    setActionErr('');
+    setEmpQuery('');
+    setEmpDropdownOpen(false);
+    setActionForm({
+      employeeId: '',
+      departmentId: '',
+      locationId: asset.locationId || '',
+      locationDetail: asset.locationDetail || '',
+      reason: '',
+      notes: '',
+    });
+  };
+
+  const resolveDeptLocationId = (deptId?: string | null) => {
+    if (!deptId) return '';
+    const dept = (meta.departments || []).find((d: any) => d.id === deptId);
+    return dept?.locationId || dept?.location?.id || '';
+  };
+
+  const handleSelectActionEmployee = (emp: any) => {
+    const nextDeptId = emp.departmentId || '';
+    const mappedLocId = emp.department?.locationId || resolveDeptLocationId(nextDeptId);
+    setActionForm((prev) => ({
+      ...prev,
+      employeeId: emp.id,
+      departmentId: nextDeptId || prev.departmentId,
+      locationId: mappedLocId || prev.locationId,
+    }));
+    setEmpQuery(`${emp.code} — ${emp.fullName}`);
+    setEmpDropdownOpen(false);
+  };
+
+  const handleActionDeptChange = (deptId: string) => {
+    const mappedLocId = resolveDeptLocationId(deptId);
+    setActionForm((prev) => ({
+      ...prev,
+      departmentId: deptId,
+      locationId: mappedLocId || prev.locationId,
+    }));
+  };
+
+  const handleSubmitAction = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!actionAsset) return;
+    setActionErr('');
+    if (actionMode !== 'RETURN' && !actionForm.employeeId && !actionForm.departmentId) {
+      setActionErr('Vui lòng chọn nhân viên hoặc phòng ban tiếp nhận.');
+      return;
+    }
+    if ((actionMode === 'TRANSFER' || actionMode === 'RETURN') && !actionForm.reason.trim()) {
+      setActionErr('Vui lòng nhập hoặc chọn lý do điều chuyển / thu hồi.');
+      return;
+    }
+    const pickedLoc = (meta.locations || []).find((l: any) => l.id === actionForm.locationId);
+    const resolvedLocationText = actionForm.locationDetail.trim() || pickedLoc?.name || undefined;
+    setActionSaving(true);
+    try {
+      if (actionMode === 'HANDOVER') {
+        await api.post('/transfers/handover', {
+          assetId: actionAsset.id,
+          employeeId: actionForm.employeeId || undefined,
+          departmentId: actionForm.departmentId || undefined,
+          assigneeName: selectedEmployee?.fullName || undefined,
+          locationId: actionForm.locationId || undefined,
+          locationDetail: resolvedLocationText,
+          notes: actionForm.notes.trim() || undefined,
+        });
+        setNotice({
+          type: 'ok',
+          text: `Đã cấp phát tài sản "${actionAsset.assetCode}" cho ${selectedEmployee?.fullName || deptNameById.get(actionForm.departmentId) || 'đơn vị tiếp nhận'}.`,
+        });
+      } else if (actionMode === 'RETURN') {
+        await api.post('/transfers', {
+          assetId: actionAsset.id,
+          mode: 'RETURN',
+          reason: actionForm.reason.trim(),
+          notes: actionForm.notes.trim() || undefined,
+        });
+        setNotice({
+          type: 'err',
+          text: `Đã thu hồi tài sản "${actionAsset.assetCode}" về Kho IT (Chưa phân bổ).`,
+        });
+      } else {
+        await api.post('/transfers', {
+          assetId: actionAsset.id,
+          employeeId: actionForm.employeeId || undefined,
+          toDepartmentId: actionForm.departmentId || undefined,
+          toUserName: selectedEmployee?.fullName || undefined,
+          toLocationId: actionForm.locationId || undefined,
+          toLocation: resolvedLocationText,
+          reason: actionForm.reason.trim(),
+          notes: actionForm.notes.trim() || undefined,
+        });
+        setNotice({
+          type: 'ok',
+          text: `Đã điều chuyển tài sản "${actionAsset.assetCode}" sang ${selectedEmployee?.fullName || deptNameById.get(actionForm.departmentId) || 'đơn vị mới'}.`,
+        });
+      }
+      setActionAsset(null);
+      loadSummary();
+      loadAssets(debouncedSearch, true);
+    } catch (err: any) {
+      setActionErr(err.response?.data?.message || 'Không thể thực hiện thao tác cấp phát / điều chuyển.');
+    } finally {
+      setActionSaving(false);
+    }
+  };
+
+  const handleQuickStatusChange = async (asset: any, nextStatus: string) => {
+    if (!nextStatus || nextStatus === asset.status || updatingStatusId) return;
+    setUpdatingStatusId(asset.id);
+    try {
+      await api.patch(`/assets/${asset.id}`, {
+        status: nextStatus,
+        reason: 'Cập nhật nhanh trạng thái tại danh sách tài sản',
+      });
+      const info = getStatusInfo(nextStatus);
+      const isAlertStatus = ['BROKEN', 'LOST', 'DISPOSED'].includes(nextStatus);
+      setNotice({
+        type: isAlertStatus ? 'err' : 'ok',
+        text: `Đã chuyển trạng thái "${asset.assetCode}" sang "${info.label}".`,
+      });
+      loadSummary();
+      loadAssets(debouncedSearch, true);
+    } catch (err: any) {
+      setNotice({
+        type: 'err',
+        text: err.response?.data?.message || 'Không thể cập nhật trạng thái tài sản.',
+      });
+    } finally {
+      setUpdatingStatusId(null);
+    }
+  };
 
   useEffect(() => {
     const q = searchParams.get('search') || '';
@@ -281,6 +510,19 @@ export const AssetsPage: React.FC = () => {
       />
 
       {/* Asset Statistics Cards */}
+      {notice && (
+        <div
+          className={`p-3 rounded-md border text-sm flex items-center gap-2 shrink-0 ${
+            notice.type === 'ok'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {notice.type === 'err' && <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{notice.text}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
         {statCards.map((c) => {
           const Icon = c.icon;
@@ -465,10 +707,43 @@ export const AssetsPage: React.FC = () => {
                       </td>
                       <td className="td-cell text-xs">
                         <div className="font-medium text-ink-primary">{a.usingDepartment?.name || 'Kho / Chưa phân bổ'}</div>
-                        <div className="text-ink-muted">{a.assignedUserName || '—'}</div>
+                        <div className="text-ink-muted">
+                          {a.assignedEmployee
+                            ? `${a.assignedEmployee.code} — ${a.assignedEmployee.fullName}`
+                            : a.assignedUserName || '—'}
+                        </div>
                       </td>
                       <td className="td-cell">
-                        <AssetStatusBadge status={a.status} />
+                        {can('assets.update') ? (
+                          (() => {
+                            const info = getStatusInfo(a.status);
+                            const options = activeStatuses.length > 0 ? activeStatuses : assetStatusList;
+                            const hasCurrent = options.some((s) => s.code === a.status);
+                            return (
+                              <select
+                                value={a.status}
+                                disabled={updatingStatusId === a.id}
+                                onChange={(e) => handleQuickStatusChange(a, e.target.value)}
+                                title="Cập nhật nhanh trạng thái tài sản"
+                                style={{
+                                  backgroundColor: info.bgColor,
+                                  color: info.textColor,
+                                  borderColor: `${info.textColor}33`,
+                                }}
+                                className="px-2 py-0.5 rounded border text-xs font-medium cursor-pointer focus:outline-none focus:ring-2 focus:ring-brand/30 disabled:opacity-50"
+                              >
+                                {!hasCurrent && <option value={a.status}>{info.label}</option>}
+                                {options.map((s) => (
+                                  <option key={s.id} value={s.code} style={{ backgroundColor: '#ffffff', color: '#0f172a' }}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            );
+                          })()
+                        ) : (
+                          <AssetStatusBadge status={a.status} />
+                        )}
                       </td>
                       <td className="td-cell">
                         {ag ? (
@@ -483,6 +758,26 @@ export const AssetsPage: React.FC = () => {
                       </td>
                       <td className="td-cell text-right">
                         <div className="inline-flex items-center gap-1.5">
+                          {can('transfers.manage') && a.status !== 'DISPOSED' && (() => {
+                            const hasHolder = Boolean(a.usingDepartmentId || a.assignedEmployeeId || a.assignedUserName);
+                            return (
+                              <Link
+                                to={`/transfers/new?assetId=${a.id}`}
+                                className={`btn-secondary p-1.5 ${
+                                  hasHolder
+                                    ? 'bg-sky-50 border-sky-200 text-[#006E96] hover:bg-sky-100'
+                                    : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+                                }`}
+                                title={hasHolder ? 'Điều chuyển / Thu hồi tài sản' : 'Cấp phát tài sản'}
+                              >
+                                {hasHolder ? (
+                                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                                ) : (
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                )}
+                              </Link>
+                            );
+                          })()}
                           <button
                             onClick={() => setQrAsset(a)}
                             className="btn-secondary p-1.5"
@@ -597,28 +892,274 @@ export const AssetsPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Quick Assign / Transfer / Return Modal */}
+      <Modal
+        open={!!actionAsset}
+        onClose={() => setActionAsset(null)}
+        title={actionAsset ? `Cấp phát & Điều chuyển — ${actionAsset.assetCode}` : 'Cấp phát & Điều chuyển tài sản'}
+        maxWidth="max-w-lg"
+      >
+        {actionAsset && (
+          <form onSubmit={handleSubmitAction} className="space-y-4">
+            <div className="p-3 rounded-lg bg-slate-50 border border-line text-xs space-y-1">
+              <div className="font-semibold text-ink-primary flex items-center justify-between gap-2">
+                <span className="truncate">{actionAsset.name}</span>
+                <span className="font-mono text-brand shrink-0">{actionAsset.assetCode}</span>
+              </div>
+              <div className="text-ink-secondary">
+                Hiện tại: <strong>{actionAsset.usingDepartment?.name || 'Kho / Chưa phân bổ'}</strong>
+                {' · '}
+                Người dùng:{' '}
+                <strong>
+                  {actionAsset.assignedEmployee
+                    ? `${actionAsset.assignedEmployee.code} — ${actionAsset.assignedEmployee.fullName}`
+                    : actionAsset.assignedUserName || 'Chưa gán'}
+                </strong>
+              </div>
+            </div>
+
+            {/* Mode Switcher */}
+            <div className="grid grid-cols-3 gap-1.5 p-1 rounded-lg bg-slate-100 border border-line text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setActionMode('HANDOVER');
+                  setActionErr('');
+                }}
+                className={`py-1.5 px-2 rounded-md font-medium inline-flex items-center justify-center gap-1.5 transition-colors ${
+                  actionMode === 'HANDOVER' ? 'bg-white text-brand shadow-xs' : 'text-ink-secondary hover:text-ink-primary'
+                }`}
+              >
+                <UserCheck className="w-3.5 h-3.5" /> Cấp phát
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionMode('TRANSFER');
+                  setActionErr('');
+                }}
+                className={`py-1.5 px-2 rounded-md font-medium inline-flex items-center justify-center gap-1.5 transition-colors ${
+                  actionMode === 'TRANSFER' ? 'bg-white text-brand shadow-xs' : 'text-ink-secondary hover:text-ink-primary'
+                }`}
+              >
+                <ArrowLeftRight className="w-3.5 h-3.5" /> Điều chuyển
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActionMode('RETURN');
+                  setActionErr('');
+                }}
+                className={`py-1.5 px-2 rounded-md font-medium inline-flex items-center justify-center gap-1.5 transition-colors ${
+                  actionMode === 'RETURN' ? 'bg-white text-red-600 shadow-xs' : 'text-ink-secondary hover:text-ink-primary'
+                }`}
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Thu hồi kho
+              </button>
+            </div>
+
+            {actionErr && (
+              <div className="p-2.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{actionErr}</span>
+              </div>
+            )}
+
+            {actionMode !== 'RETURN' && (
+              <>
+                {/* Searchable Employee Selector */}
+                <div ref={empBoxRef} className="relative">
+                  <label className="label-field">Nhân viên tiếp nhận</label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      value={empQuery}
+                      onFocus={() => setEmpDropdownOpen(true)}
+                      onChange={(e) => {
+                        setEmpQuery(e.target.value);
+                        setEmpDropdownOpen(true);
+                        if (actionForm.employeeId) setActionForm((p) => ({ ...p, employeeId: '' }));
+                      }}
+                      className="input-field pl-9 pr-8"
+                      placeholder="Nhập mã hoặc tên nhân viên để tìm..."
+                      autoComplete="off"
+                    />
+                    {(empQuery || actionForm.employeeId) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmpQuery('');
+                          setActionForm((p) => ({ ...p, employeeId: '' }));
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {empDropdownOpen && (
+                    <div className="absolute z-30 mt-1 w-full max-h-48 overflow-y-auto rounded-lg border border-line bg-white shadow-lg divide-y divide-slate-100">
+                      {filteredEmployees.length === 0 ? (
+                        <div className="px-3 py-3 text-xs text-ink-muted text-center">
+                          {employees.length === 0 ? 'Chưa có nhân viên trong Danh mục Nhân viên.' : 'Không tìm thấy nhân viên phù hợp.'}
+                        </div>
+                      ) : (
+                        filteredEmployees.map((emp) => {
+                          const dLabel = emp.department?.name || deptNameById.get(emp.departmentId) || 'Chưa gán phòng ban';
+                          return (
+                            <button
+                              type="button"
+                              key={emp.id}
+                              onClick={() => handleSelectActionEmployee(emp)}
+                              className={`w-full text-left px-3 py-2 text-xs hover:bg-sky-50/70 transition-colors ${
+                                emp.id === actionForm.employeeId ? 'bg-[#DFF1F8]' : ''
+                              }`}
+                            >
+                              <div className="font-medium text-ink-primary">
+                                <span className="font-mono font-semibold text-brand mr-1.5">{emp.code}</span>
+                                {emp.fullName}
+                              </div>
+                              <div className="text-[11px] text-ink-muted">
+                                {dLabel}{emp.title ? ` · ${emp.title}` : ''}
+                              </div>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="label-field flex items-center gap-1">
+                      <Building2 className="w-3.5 h-3.5 text-brand" /> Phòng ban tiếp nhận
+                    </label>
+                    <select
+                      value={actionForm.departmentId}
+                      onChange={(e) => handleActionDeptChange(e.target.value)}
+                      className="input-field"
+                    >
+                      <option value="">-- Chọn phòng ban --</option>
+                      {(meta.departments || []).map((d: any) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label-field">Vị trí đặt máy</label>
+                    <select
+                      value={actionForm.locationId}
+                      onChange={(e) => setActionForm({ ...actionForm, locationId: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="">-- Chọn vị trí --</option>
+                      {(meta.locations || []).map((loc: any) => (
+                        <option key={loc.id} value={loc.id}>
+                          {loc.name}
+                          {[loc.building, loc.floor, loc.room].filter(Boolean).length > 0
+                            ? ` (${[loc.building, loc.floor, loc.room].filter(Boolean).join(' · ')})`
+                            : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {(actionMode === 'TRANSFER' || actionMode === 'RETURN') && (
+              <div className="space-y-1.5">
+                <label className="label-field">
+                  Lý do {actionMode === 'RETURN' ? 'thu hồi' : 'điều chuyển'} <span className="text-red-500">*</span>
+                </label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(actionMode === 'RETURN' ? QUICK_RETURN_REASONS : QUICK_TRANSFER_REASONS).map((chip) => (
+                    <button
+                      type="button"
+                      key={chip}
+                      onClick={() => setActionForm((p) => ({ ...p, reason: chip }))}
+                      className={`px-2 py-0.5 rounded-full text-[11px] border transition-colors ${
+                        actionForm.reason === chip
+                          ? 'bg-brand text-white border-brand'
+                          : 'bg-slate-50 text-ink-secondary border-line hover:border-brand/50'
+                      }`}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  required
+                  value={actionForm.reason}
+                  onChange={(e) => setActionForm({ ...actionForm, reason: e.target.value })}
+                  className="input-field"
+                  placeholder="Nhập lý do thực hiện"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="label-field">Ghi chú</label>
+              <input
+                value={actionForm.notes}
+                onChange={(e) => setActionForm({ ...actionForm, notes: e.target.value })}
+                className="input-field"
+                placeholder="Ghi chú bàn giao / tình trạng máy kèm theo (nếu có)"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-line">
+              <button type="button" onClick={() => setActionAsset(null)} className="btn-secondary">
+                Hủy
+              </button>
+              <button
+                type="submit"
+                disabled={actionSaving}
+                className={actionMode === 'RETURN' ? 'btn-primary !bg-red-600 hover:!bg-red-700' : 'btn-primary'}
+              >
+                {actionSaving
+                  ? 'Đang lưu...'
+                  : actionMode === 'HANDOVER'
+                    ? 'Xác nhận cấp phát'
+                    : actionMode === 'RETURN'
+                      ? 'Xác nhận thu hồi về kho'
+                      : 'Xác nhận điều chuyển'}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
       {/* QR Code Label Print Modal */}
       <Modal open={!!qrAsset} onClose={() => setQrAsset(null)} title="Tem nhãn mã QR tài sản" maxWidth="max-w-sm">
-        {qrAsset && (
-          <div className="text-center space-y-4">
-            <div className="p-5 border-2 border-dashed border-slate-300 rounded-lg inline-block bg-white">
-              <QRCodeSVG value={qrAsset.qrCodeValue || `ITAM:${qrAsset.assetCode}`} size={180} />
-              <div className="mt-3 font-mono text-base font-bold text-ink-primary">{qrAsset.assetCode}</div>
-              <div className="text-xs text-ink-secondary max-w-[200px] mx-auto truncate">{qrAsset.name}</div>
-              {qrAsset.serialNumber && (
-                <div className="text-[11px] font-mono text-ink-muted mt-0.5">SN: {qrAsset.serialNumber}</div>
-              )}
+        {qrAsset && (() => {
+          const qrUrl = `${window.location.origin}/qr/${encodeURIComponent(qrAsset.assetCode)}`;
+          return (
+            <div className="text-center space-y-4">
+              <AssetQrLabel asset={qrAsset} config={meta.qrConfig} />
+              <div className="no-print text-[11px] text-ink-muted space-y-1">
+                <div>Quét bằng camera điện thoại để xem ngay thẻ thông tin tài sản.</div>
+                <a
+                  href={qrUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-brand hover:underline font-medium"
+                >
+                  <ExternalLink className="w-3 h-3" /> Mở trang xem trước tem QR
+                </a>
+              </div>
+              <div className="no-print flex justify-center gap-2">
+                <button onClick={() => window.print()} className="btn-primary">
+                  <Printer className="w-4 h-4" /> In tem QR
+                </button>
+                <button onClick={() => setQrAsset(null)} className="btn-secondary">
+                  Đóng
+                </button>
+              </div>
             </div>
-            <div className="no-print flex justify-center gap-2">
-              <button onClick={() => window.print()} className="btn-primary">
-                <Printer className="w-4 h-4" /> In tem QR
-              </button>
-              <button onClick={() => setQrAsset(null)} className="btn-secondary">
-                Đóng
-              </button>
-            </div>
-          </div>
-        )}
+          );
+        })()}
       </Modal>
     </div>
   );

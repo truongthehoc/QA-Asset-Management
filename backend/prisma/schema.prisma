@@ -19,10 +19,12 @@ model Department {
   code                String   @unique
   name                String
   description         String?
+  locationId          String?
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  location            Location?         @relation(fields: [locationId], references: [id])
   users               User[]
   employees           Employee[]
   managedAssets       Asset[]          @relation("ManagingDepartment")
@@ -46,6 +48,7 @@ model Location {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  departments Department[]
   assets      Asset[]
 }
 
@@ -238,7 +241,7 @@ model Asset {
   handoverBy            String?
   receivedBy            String?
   officialSpecsJson     String? @db.LongText   // JSON string of IT-confirmed baseline hardware/OS summary
-  notes                 String?
+  notes                 String? @db.LongText
   approvedById          String?
   approvedAt            DateTime?
   createdById           String?
@@ -885,8 +888,8 @@ model AgentCommand {
 model SystemSetting {
   id          String   @id @default(uuid())
   key         String   @unique
-  value       String
-  group       String   @default("GENERAL") // ASSET_CODE, AGENT_SCHEDULE, ALERT, SECURITY, GENERAL
+  value       String   @db.LongText
+  group       String   @default("GENERAL") // ORG_INFO, DOCUMENT_TEMPLATE, ASSET_CODE, QR_LABEL, AGENT_SCHEDULE, ALERT, SECURITY, GENERAL
   description String?
   updatedBy   String?
   updatedAt   DateTime @updatedAt

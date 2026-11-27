@@ -71,6 +71,18 @@ export const AgentManagementPage: React.FC = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!msg) return;
+    const t = window.setTimeout(() => setMsg(''), 3000);
+    return () => window.clearTimeout(t);
+  }, [msg]);
+
+  useEffect(() => {
+    if (!errMsg) return;
+    const t = window.setTimeout(() => setErrMsg(''), 3000);
+    return () => window.clearTimeout(t);
+  }, [errMsg]);
+
   const handleSelectTokenRow = (t: any) => {
     setErrMsg('');
     if (!t.isUsable) {
@@ -126,6 +138,8 @@ export const AgentManagementPage: React.FC = () => {
   const handleRevokeToken = async (id: string) => {
     if (!window.confirm('Xác nhận thu hồi Enrollment Token này?')) return;
     await api.patch(`/agents/tokens/${id}/revoke`);
+    setMsg('');
+    setErrMsg('Đã thu hồi Enrollment Token.');
     load();
   };
 

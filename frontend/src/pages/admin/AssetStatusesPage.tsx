@@ -127,7 +127,7 @@ export const AssetStatusesPage: React.FC = () => {
     setFeedback(null);
     try {
       await api.delete(`/admin/asset-statuses/${st.id}`);
-      setFeedback({ type: 'ok', text: `Đã xóa trạng thái tài sản "${st.name}".` });
+      setFeedback({ type: 'err', text: `Đã xóa trạng thái tài sản "${st.name}".` });
       await Promise.all([load(), refresh()]);
     } catch (err: any) {
       setFeedback({

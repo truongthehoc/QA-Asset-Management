@@ -8,7 +8,11 @@ export function formatVnd(amount?: number | null): string {
 
 export function formatDate(date?: string | Date | null): string {
   if (!date) return '—';
-  return new Date(date).toLocaleDateString('vi-VN');
+  return new Date(date).toLocaleDateString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }
 
 export function formatDateTime(date?: string | Date | null): string {
@@ -55,6 +59,56 @@ export const SEVERITY_META: Record<string, { label: string; cls: string }> = {
   HIGH: { label: 'Cao', cls: 'bg-orange-50 text-orange-800 border-orange-200' },
   CRITICAL: { label: 'Nghiêm trọng', cls: 'bg-red-50 text-red-700 border-red-200' },
 };
+
+export const AUDIT_ACTION_LABELS: Record<string, string> = {
+  CREATED: 'Tạo mới tài sản',
+  UPDATED: 'Cập nhật thông tin',
+  CODE_CHANGED: 'Điều chỉnh mã tài sản',
+  APPROVED: 'Phê duyệt thiết bị thành tài sản',
+  HANDOVER: 'Cấp phát / Bàn giao tài sản',
+  TRANSFERRED: 'Điều chuyển tài sản',
+  RETURNED_TO_STOCK: 'Thu hồi về kho',
+  DOCUMENT_UPLOADED: 'Tải lên hồ sơ đính kèm',
+  DOCUMENT_DELETED: 'Xóa hồ sơ đính kèm',
+  BASELINE_CONFIRMED: 'Xác nhận Baseline cấu hình',
+  CHANGE_APPROVED: 'Phê duyệt thay đổi cấu hình',
+  CHANGE_REJECTED: 'Từ chối thay đổi cấu hình',
+  MAINTENANCE_CREATED: 'Tạo phiếu bảo trì / sửa chữa',
+  MAINTENANCE_COMPLETED: 'Hoàn tất bảo trì / sửa chữa',
+  DISPOSED: 'Thanh lý tài sản',
+  INVENTORY_CHECKED: 'Xác nhận kiểm kê',
+  USER_LOGIN: 'Đăng nhập hệ thống',
+  USER_CREATED: 'Tạo tài khoản người dùng',
+  USER_UPDATED: 'Cập nhật tài khoản người dùng',
+  USER_ACTIVATED: 'Kích hoạt tài khoản',
+  USER_DISABLED: 'Ngưng hoạt động tài khoản',
+  ROLE_CREATED: 'Tạo nhóm quyền',
+  ROLE_UPDATED: 'Cập nhật nhóm quyền',
+  ROLE_DELETED: 'Xóa nhóm quyền',
+  EMPLOYEE_CREATED: 'Thêm nhân viên',
+  EMPLOYEE_UPDATED: 'Cập nhật nhân viên',
+  EMPLOYEE_ACTIVATED: 'Kích hoạt nhân viên',
+  EMPLOYEE_DEACTIVATED: 'Ngưng hoạt động nhân viên',
+  EMPLOYEE_DELETED: 'Xóa nhân viên',
+  ASSET_CATEGORY_CREATED: 'Thêm nhóm tài sản',
+  ASSET_CATEGORY_UPDATED: 'Cập nhật nhóm tài sản',
+  ASSET_CATEGORY_DELETED: 'Xóa nhóm tài sản',
+  ASSET_STATUS_CREATED: 'Thêm trạng thái tài sản',
+  ASSET_STATUS_UPDATED: 'Cập nhật trạng thái tài sản',
+  ASSET_STATUS_ACTIVATED: 'Kích hoạt trạng thái tài sản',
+  ASSET_STATUS_DEACTIVATED: 'Ngưng sử dụng trạng thái tài sản',
+  ASSET_STATUS_DELETED: 'Xóa trạng thái tài sản',
+  SYSTEM_SETTING_UPDATED: 'Cập nhật cấu hình hệ thống',
+  ENROLLMENT_TOKEN_CREATED: 'Tạo Enrollment Token',
+  ENROLLMENT_TOKEN_REVOKED: 'Thu hồi Enrollment Token',
+  AGENT_ENROLLED: 'Đăng ký Windows Agent',
+  AGENT_REVOKED: 'Thu hồi Windows Agent',
+};
+
+export function formatAuditAction(action?: string | null): string {
+  if (!action) return '—';
+  return AUDIT_ACTION_LABELS[action] || action;
+}
 
 export const ALERT_STATUS_META: Record<string, { label: string; cls: string }> = {
   NEW: { label: 'Mới', cls: 'bg-red-50 text-red-700 border-red-200' },

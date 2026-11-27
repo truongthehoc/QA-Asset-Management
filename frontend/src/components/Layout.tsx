@@ -93,7 +93,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       setToasts((prev) => [...prev.slice(-2), { ...item, id }]);
       window.setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 8000);
+      }, 3000);
     };
 
     const pollStatus = async () => {

@@ -31,6 +31,12 @@ export const InventoryPage: React.FC = () => {
     loadSessions();
   }, []);
 
+  useEffect(() => {
+    if (!scanMsg) return;
+    const t = window.setTimeout(() => setScanMsg(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [scanMsg]);
+
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await api.post('/inventory/sessions', newForm);

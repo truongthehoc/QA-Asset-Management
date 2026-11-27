@@ -14,7 +14,7 @@ export const AlertsPage: React.FC = () => {
   const [rules, setRules] = useState<any[]>([]);
   const [catFilter, setCatFilter] = useState('');
   const [sevFilter, setSevFilter] = useState('');
-  const [msg, setMsg] = useState('');
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const load = async () => {
     const [aRes, cRes, rRes] = await Promise.all([
@@ -34,6 +34,12 @@ export const AlertsPage: React.FC = () => {
     return () => window.removeEventListener('itam:realtime-update', onRealtime);
   }, [catFilter, sevFilter]);
 
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
+
   const handleVerifyChange = async (change: any, decision: 'APPROVED' | 'REJECTED') => {
     const notes = window.prompt(
       decision === 'APPROVED'
@@ -47,11 +53,13 @@ export const AlertsPage: React.FC = () => {
       notes,
       updateBaseline: decision === 'APPROVED',
     });
-    setMsg(
-      decision === 'APPROVED'
-        ? `Đã xác minh và cập nhật Baseline cho ${change.asset?.assetCode || change.agent?.hostname}.`
-        : `Đã từ chối thay đổi trên ${change.asset?.assetCode || change.agent?.hostname}; Baseline cũ được giữ nguyên.`,
-    );
+    setNotice({
+      type: decision === 'APPROVED' ? 'ok' : 'err',
+      text:
+        decision === 'APPROVED'
+          ? `Đã xác minh và cập nhật Baseline cho ${change.asset?.assetCode || change.agent?.hostname}.`
+          : `Đã từ chối thay đổi trên ${change.asset?.assetCode || change.agent?.hostname}; Baseline cũ được giữ nguyên.`,
+    });
     load();
   };
 
@@ -81,7 +89,17 @@ export const AlertsPage: React.FC = () => {
         }
       />
 
-      {msg && <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">{msg}</div>}
+      {notice && (
+        <div
+          className={`p-3 rounded-md border text-sm ${
+            notice.type === 'ok'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
 
       <div className="flex gap-1 border-b border-line overflow-x-auto">
         <button onClick={() => setTab('changes')} className={`px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap ${tab === 'changes' ? 'border-brand text-brand' : 'border-transparent text-ink-secondary'}`}>

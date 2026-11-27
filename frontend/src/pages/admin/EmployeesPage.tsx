@@ -140,7 +140,7 @@ export const EmployeesPage: React.FC = () => {
     setFeedback(null);
     try {
       await api.delete(`/admin/employees/${emp.id}`);
-      setFeedback({ type: 'ok', text: `Đã xóa nhân viên "${emp.fullName}".` });
+      setFeedback({ type: 'err', text: `Đã xóa nhân viên "${emp.fullName}".` });
       load();
     } catch (err: any) {
       setFeedback({ type: 'err', text: err.response?.data?.message || 'Không thể xóa nhân viên này.' });

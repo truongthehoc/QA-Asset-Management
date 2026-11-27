@@ -10,7 +10,7 @@ export const LocationsPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ code: '', name: '', building: '', floor: '', room: '' });
-  const [msg, setMsg] = useState('');
+  const [notice, setNotice] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
 
   const load = async () => {
     const res = await api.get('/admin/meta');
@@ -21,19 +21,26 @@ export const LocationsPage: React.FC = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!notice) return;
+    const t = window.setTimeout(() => setNotice(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [notice]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMsg('');
+    setNotice(null);
     await api.post('/admin/locations', form);
     setForm({ code: '', name: '', building: '', floor: '', room: '' });
     setOpen(false);
-    setMsg('Đã thêm vị trí đặt thiết bị mới.');
+    setNotice({ type: 'ok', text: 'Đã thêm vị trí đặt thiết bị mới.' });
     load();
   };
 
   const handleDelete = async (l: any) => {
     if (!window.confirm(`Xác nhận ẩn vị trí "${l.name}"?`)) return;
     await api.delete(`/admin/locations/${l.id}`);
+    setNotice({ type: 'err', text: `Đã ẩn vị trí "${l.name}".` });
     load();
   };
 
@@ -58,7 +65,17 @@ export const LocationsPage: React.FC = () => {
         }
       />
 
-      {msg && <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">{msg}</div>}
+      {notice && (
+        <div
+          className={`p-3 rounded-md border text-sm ${
+            notice.type === 'ok'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-red-50 border-red-200 text-red-700'
+          }`}
+        >
+          {notice.text}
+        </div>
+      )}
 
       <div className="panel p-3.5 max-w-md">
         <div className="relative">

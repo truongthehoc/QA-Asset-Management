@@ -15,7 +15,19 @@ export class TransfersService {
   async listAssignments() {
     return this.prisma.assetAssignment.findMany({
       include: {
-        asset: { select: { id: true, assetCode: true, name: true, status: true } },
+        asset: {
+          select: {
+            id: true,
+            assetCode: true,
+            name: true,
+            status: true,
+            serialNumber: true,
+            manufacturer: true,
+            model: true,
+            assetType: { select: { code: true, name: true } },
+            location: { select: { name: true } },
+          },
+        },
         department: true,
       },
       orderBy: { handoverDate: 'desc' },
@@ -25,7 +37,19 @@ export class TransfersService {
   async listTransfers() {
     return this.prisma.assetTransfer.findMany({
       include: {
-        asset: { select: { id: true, assetCode: true, name: true, status: true } },
+        asset: {
+          select: {
+            id: true,
+            assetCode: true,
+            name: true,
+            status: true,
+            serialNumber: true,
+            manufacturer: true,
+            model: true,
+            assetType: { select: { code: true, name: true } },
+            location: { select: { name: true } },
+          },
+        },
         fromDepartment: true,
         toDepartment: true,
       },
@@ -36,8 +60,26 @@ export class TransfersService {
   async createHandover(body: any, actor: AuthUser, ip?: string) {
     const asset = await this.prisma.asset.findUnique({ where: { id: body.assetId } });
     if (!asset) throw new NotFoundException('Không tìm thấy tài sản.');
-    if (!body.assigneeName) throw new BadRequestException('Vui lòng nhập người tiếp nhận.');
 
+    let employee: any = null;
+    if (body.employeeId) {
+      employee = await this.prisma.employee.findUnique({ where: { id: body.employeeId } });
+      if (!employee) throw new BadRequestException('Nhân viên được chọn không tồn tại.');
+    }
+
+    const assigneeName = (body.assigneeName || employee?.fullName || '').trim();
+    const departmentId = body.departmentId || employee?.departmentId || null;
+    if (!assigneeName && !departmentId) {
+      throw new BadRequestException('Vui lòng chọn nhân viên hoặc phòng ban tiếp nhận.');
+    }
+
+    let resolvedLocationId = body.locationId || null;
+    if (!resolvedLocationId && departmentId) {
+      const dept = await this.prisma.department.findUnique({ where: { id: departmentId }, select: { locationId: true } });
+      resolvedLocationId = dept?.locationId || null;
+    }
+
+    const displayAssignee = assigneeName || 'Phòng ban tiếp nhận';
     const assignmentCode = `BG-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
     const result = await this.prisma.$transaction(async (tx) => {
       await tx.assetAssignment.updateMany({
@@ -49,14 +91,30 @@ export class TransfersService {
         data: {
           assetId: asset.id,
           assignmentCode,
-          departmentId: body.departmentId || null,
-          assigneeName: body.assigneeName,
+          departmentId,
+          assigneeName: displayAssignee,
           assigneeUserId: body.assigneeUserId || null,
-          handoverBy: body.handoverBy || actor.fullName,
-          receivedBy: body.receivedBy || body.assigneeName,
+          handoverBy: body.handoverBy !== undefined ? String(body.handoverBy).trim() : actor.fullName,
+          receivedBy: body.receivedBy !== undefined ? String(body.receivedBy).trim() : displayAssignee,
           locationDetail: body.locationDetail || null,
           handoverDate: body.handoverDate ? new Date(body.handoverDate) : new Date(),
           notes: body.notes || null,
+        },
+        include: {
+          asset: {
+            select: {
+              id: true,
+              assetCode: true,
+              name: true,
+              status: true,
+              serialNumber: true,
+              manufacturer: true,
+              model: true,
+              assetType: { select: { code: true, name: true } },
+              location: { select: { name: true } },
+            },
+          },
+          department: true,
         },
       });
 
@@ -64,10 +122,11 @@ export class TransfersService {
         where: { id: asset.id },
         data: {
           status: 'IN_USE',
-          usingDepartmentId: body.departmentId || asset.usingDepartmentId,
+          usingDepartmentId: departmentId || asset.usingDepartmentId,
+          assignedEmployeeId: employee ? employee.id : null,
           assignedUserId: body.assigneeUserId || null,
-          assignedUserName: body.assigneeName,
-          locationId: body.locationId || asset.locationId,
+          assignedUserName: displayAssignee,
+          locationId: resolvedLocationId || asset.locationId,
           locationDetail: body.locationDetail || asset.locationDetail,
           handoverDate: rec.handoverDate,
           handoverBy: rec.handoverBy,
@@ -81,8 +140,8 @@ export class TransfersService {
       assetId: asset.id,
       action: 'HANDOVER',
       oldValue: asset.assignedUserName || 'Chưa phân bổ',
-      newValue: `${body.assigneeName} (${assignmentCode})`,
-      reason: body.notes || 'Lập phiếu bàn giao tài sản',
+      newValue: `${displayAssignee} (${assignmentCode})`,
+      reason: body.notes || 'Lập phiếu cấp phát / bàn giao tài sản',
       actorId: actor.id,
       actorName: actor.fullName,
       ipAddress: ip,
@@ -102,6 +161,22 @@ export class TransfersService {
     if (!asset) throw new NotFoundException('Không tìm thấy tài sản.');
     if (!body.reason || !body.reason.trim()) throw new BadRequestException('Vui lòng nhập lý do điều chuyển.');
 
+    const isReturnToWarehouse = body.mode === 'RETURN' || (!body.employeeId && !body.toDepartmentId && !body.toUserName);
+    let employee: any = null;
+    if (!isReturnToWarehouse && body.employeeId) {
+      employee = await this.prisma.employee.findUnique({ where: { id: body.employeeId } });
+      if (!employee) throw new BadRequestException('Nhân viên được chọn không tồn tại.');
+    }
+
+    const toDepartmentId = isReturnToWarehouse ? null : (body.toDepartmentId || employee?.departmentId || null);
+    const toUserName = isReturnToWarehouse ? null : ((body.toUserName || employee?.fullName || '').trim() || null);
+
+    let resolvedToLocationId = isReturnToWarehouse ? null : (body.toLocationId || null);
+    if (!isReturnToWarehouse && !resolvedToLocationId && toDepartmentId) {
+      const dept = await this.prisma.department.findUnique({ where: { id: toDepartmentId }, select: { locationId: true } });
+      resolvedToLocationId = dept?.locationId || null;
+    }
+
     const transferCode = `DC-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
     const result = await this.prisma.$transaction(async (tx) => {
       const rec = await tx.assetTransfer.create({
@@ -111,16 +186,36 @@ export class TransfersService {
           fromDepartmentId: asset.usingDepartmentId,
           fromUserName: asset.assignedUserName || 'Kho / Chưa gán',
           fromLocation: asset.location?.name || asset.locationDetail || null,
-          toDepartmentId: body.toDepartmentId || null,
-          toUserName: body.toUserName || null,
+          toDepartmentId,
+          toUserName: toUserName || (isReturnToWarehouse ? 'Kho IT' : null),
           toLocation: body.toLocation || null,
           reason: body.reason.trim(),
-          handoverBy: body.handoverBy || actor.fullName,
-          receivedBy: body.receivedBy || body.toUserName || 'Đại diện phòng ban mới',
+          handoverBy: body.handoverBy !== undefined ? String(body.handoverBy).trim() : actor.fullName,
+          receivedBy:
+            body.receivedBy !== undefined
+              ? String(body.receivedBy).trim()
+              : toUserName || (isReturnToWarehouse ? actor.fullName : 'Đại diện phòng ban mới'),
           transferDate: body.transferDate ? new Date(body.transferDate) : new Date(),
           status: 'COMPLETED',
           notes: body.notes || null,
           createdById: actor.id,
+        },
+        include: {
+          asset: {
+            select: {
+              id: true,
+              assetCode: true,
+              name: true,
+              status: true,
+              serialNumber: true,
+              manufacturer: true,
+              model: true,
+              assetType: { select: { code: true, name: true } },
+              location: { select: { name: true } },
+            },
+          },
+          fromDepartment: true,
+          toDepartment: true,
         },
       });
 
@@ -129,13 +224,13 @@ export class TransfersService {
         data: { status: 'RETURNED', returnDate: new Date() },
       });
 
-      if (body.toUserName || body.toDepartmentId) {
+      if (!isReturnToWarehouse && (toUserName || toDepartmentId)) {
         await tx.assetAssignment.create({
           data: {
             assetId: asset.id,
             assignmentCode: `BG-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`,
-            departmentId: body.toDepartmentId || null,
-            assigneeName: body.toUserName || 'Phòng ban tiếp nhận',
+            departmentId: toDepartmentId,
+            assigneeName: toUserName || 'Phòng ban tiếp nhận',
             assigneeUserId: body.toUserId || null,
             handoverBy: rec.handoverBy,
             receivedBy: rec.receivedBy,
@@ -149,12 +244,13 @@ export class TransfersService {
       await tx.asset.update({
         where: { id: asset.id },
         data: {
-          status: body.toDepartmentId || body.toUserName ? 'IN_USE' : 'UNALLOCATED',
-          usingDepartmentId: body.toDepartmentId || null,
-          assignedUserId: body.toUserId || null,
-          assignedUserName: body.toUserName || null,
-          locationId: body.toLocationId || asset.locationId,
-          locationDetail: body.toLocation || asset.locationDetail,
+          status: isReturnToWarehouse ? 'UNALLOCATED' : 'IN_USE',
+          usingDepartmentId: toDepartmentId,
+          assignedEmployeeId: employee ? employee.id : null,
+          assignedUserId: isReturnToWarehouse ? null : (body.toUserId || null),
+          assignedUserName: toUserName,
+          locationId: isReturnToWarehouse ? null : (resolvedToLocationId || asset.locationId),
+          locationDetail: isReturnToWarehouse ? null : (body.toLocation || asset.locationDetail),
           handoverDate: rec.transferDate,
           handoverBy: rec.handoverBy,
           receivedBy: rec.receivedBy,
@@ -166,9 +262,9 @@ export class TransfersService {
 
     await this.auditService.logAsset({
       assetId: asset.id,
-      action: 'TRANSFERRED',
+      action: isReturnToWarehouse ? 'RETURNED_TO_STOCK' : 'TRANSFERRED',
       oldValue: `${asset.usingDepartment?.name || 'Kho'} / ${asset.assignedUserName || 'N/A'}`,
-      newValue: `${body.toUserName || 'Phòng ban mới'} (${transferCode})`,
+      newValue: isReturnToWarehouse ? `Thu hồi về kho (${transferCode})` : `${toUserName || 'Phòng ban mới'} (${transferCode})`,
       reason: body.reason.trim(),
       actorId: actor.id,
       actorName: actor.fullName,

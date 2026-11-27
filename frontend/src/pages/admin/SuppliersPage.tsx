@@ -21,6 +21,12 @@ export const SuppliersPage: React.FC = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!msg) return;
+    const t = window.setTimeout(() => setMsg(''), 3000);
+    return () => window.clearTimeout(t);
+  }, [msg]);
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setMsg('');

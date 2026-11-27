@@ -1,9 +1,18 @@
-import { Module, Injectable, Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Module, Injectable, Controller, Get, Post, Patch, Delete, Param, Body, Query, Res, UseGuards, UseInterceptors, UploadedFile, BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { Response } from 'express';
+import { memoryStorage } from 'multer';
 import * as bcrypt from 'bcryptjs';
+import * as fs from 'fs';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { JwtAuthGuard, PermissionsGuard, RequirePermissions, CurrentUser, AuthUser } from '../auth/guards';
+
+const ALLOWED_LOGO_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.svg']);
+const ALLOWED_LOGO_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
 
 const DEFAULT_ASSET_STATUSES = [
   { code: 'IN_USE', name: 'Đang sử dụng', bgColor: '#ECFDF5', textColor: '#047857', description: 'Tài sản đang được bàn giao và sử dụng', sortOrder: 1 },
@@ -35,24 +44,86 @@ export class CatalogsService {
   }
 
   async ensureDefaultSystemSettings() {
-    await this.prisma.systemSetting.upsert({
-      where: { key: 'discovery.lan_scan_enabled' },
-      update: {},
-      create: {
+    const defaults = [
+      {
         key: 'discovery.lan_scan_enabled',
         value: 'false',
         group: 'DISCOVERY',
         description: 'Bật/tắt tính năng quét dải IP mạng LAN (chỉ bật khi triển khai máy chủ trong mạng nội bộ công ty)',
       },
-    });
+      {
+        key: 'qr.label_title',
+        value: 'TÀI SẢN CNTT',
+        group: 'QR_LABEL',
+        description: 'Tiêu đề hoặc tên công ty/đơn vị hiển thị ở đầu tem mã QR',
+      },
+      {
+        key: 'qr.size_px',
+        value: '180',
+        group: 'QR_LABEL',
+        description: 'Kích thước mã QR (px) khi in tem nhãn tài sản',
+      },
+      {
+        key: 'qr.fields',
+        value: 'assetCode,name,serialNumber,department,employee',
+        group: 'QR_LABEL',
+        description: 'Các trường thông tin hiển thị trên tem mã QR và thẻ tra cứu nhanh',
+      },
+      {
+        key: 'org.name',
+        value: '',
+        group: 'ORG_INFO',
+        description: 'Tên đầy đủ của công ty / đơn vị sử dụng hệ thống',
+      },
+      {
+        key: 'org.address',
+        value: '',
+        group: 'ORG_INFO',
+        description: 'Địa chỉ trụ sở đơn vị hiển thị trên các biên bản',
+      },
+      {
+        key: 'org.tax_code',
+        value: '',
+        group: 'ORG_INFO',
+        description: 'Mã số thuế của đơn vị',
+      },
+      {
+        key: 'org.logo_url',
+        value: '',
+        group: 'ORG_INFO',
+        description: 'Logo đơn vị (tải ảnh PNG/JPG/SVG hoặc nhập đường dẫn ảnh)',
+      },
+      {
+        key: 'doc.department_subtitle',
+        value: 'Phòng Công nghệ Thông tin',
+        group: 'DOCUMENT_TEMPLATE',
+        description: 'Tên phòng phụ trách hiển thị bên dưới tên đơn vị trên biên bản',
+      },
+      {
+        key: 'doc.header_fields',
+        value: 'logo,name,address,taxCode,departmentSubtitle,nationalMotto',
+        group: 'DOCUMENT_TEMPLATE',
+        description: 'Chọn các thông tin đơn vị sẽ hiển thị ở phần đầu của các biên bản bàn giao / điều chuyển / thu hồi',
+      },
+    ];
+    for (const item of defaults) {
+      await this.prisma.systemSetting.upsert({
+        where: { key: item.key },
+        update: {},
+        create: item,
+      });
+    }
   }
 
   async getAllMeta() {
     await Promise.all([this.ensureDefaultAssetStatuses(), this.ensureDefaultSystemSettings()]);
-    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions, users, employees, lanScanSetting] = await Promise.all([
+    const [departments, locations, categories, assetTypes, assetStatuses, suppliers, roles, permissions, users, employees, lanScanSetting, qrSettings] = await Promise.all([
       this.prisma.department.findMany({
         where: { isActive: true },
-        include: { _count: { select: { users: true, employees: true, usingAssets: true } } },
+        include: {
+          location: true,
+          _count: { select: { users: true, employees: true, usingAssets: true } },
+        },
         orderBy: { name: 'asc' },
       }),
       this.prisma.location.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } }),
@@ -95,12 +166,25 @@ export class CatalogsService {
           phone: true,
           title: true,
           departmentId: true,
-          department: { select: { id: true, code: true, name: true } },
+          department: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              locationId: true,
+              location: { select: { id: true, code: true, name: true, building: true, floor: true, room: true } },
+            },
+          },
         },
         orderBy: { fullName: 'asc' },
       }),
       this.prisma.systemSetting.findUnique({ where: { key: 'discovery.lan_scan_enabled' } }),
+      this.prisma.systemSetting.findMany({
+        where: { group: { in: ['QR_LABEL', 'ORG_INFO', 'DOCUMENT_TEMPLATE'] } },
+      }),
     ]);
+    const cfgMap: Record<string, string> = {};
+    for (const s of qrSettings) cfgMap[s.key] = s.value;
     return {
       departments,
       locations,
@@ -114,6 +198,27 @@ export class CatalogsService {
       employees,
       features: {
         lanScanEnabled: lanScanSetting?.value === 'true',
+      },
+      qrConfig: {
+        labelTitle: cfgMap['qr.label_title'] ?? 'TÀI SẢN CNTT',
+        sizePx: Number(cfgMap['qr.size_px']) || 180,
+        fields: (cfgMap['qr.fields'] || 'assetCode,name,serialNumber,department,employee')
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean),
+      },
+      orgInfo: {
+        name: cfgMap['org.name'] || '',
+        address: cfgMap['org.address'] || '',
+        taxCode: cfgMap['org.tax_code'] || '',
+        logoUrl: cfgMap['org.logo_url'] || '',
+      },
+      docTemplate: {
+        departmentSubtitle: cfgMap['doc.department_subtitle'] ?? 'Phòng Công nghệ Thông tin',
+        headerFields: (cfgMap['doc.header_fields'] || 'logo,name,address,taxCode,departmentSubtitle,nationalMotto')
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean),
       },
     };
   }
@@ -378,7 +483,15 @@ export class CatalogsService {
 
   // Departments
   createDepartment(data: any) {
-    return this.prisma.department.create({ data: { code: data.code.trim().toUpperCase(), name: data.name.trim(), description: data.description || null } });
+    return this.prisma.department.create({
+      data: {
+        code: data.code.trim().toUpperCase(),
+        name: data.name.trim(),
+        description: data.description || null,
+        locationId: data.locationId || null,
+      },
+      include: { location: true },
+    });
   }
   async updateDepartment(id: string, data: any) {
     const existing = await this.prisma.department.findUnique({ where: { id } });
@@ -388,7 +501,13 @@ export class CatalogsService {
     if (!code || !name) throw new BadRequestException('Mã và tên phòng ban không được để trống.');
     return this.prisma.department.update({
       where: { id },
-      data: { code, name, description: data.description !== undefined ? data.description?.trim() || null : existing.description },
+      data: {
+        code,
+        name,
+        description: data.description !== undefined ? data.description?.trim() || null : existing.description,
+        locationId: data.locationId !== undefined ? (data.locationId || null) : existing.locationId,
+      },
+      include: { location: true },
     });
   }
   deleteDepartment(id: string) {
@@ -773,6 +892,10 @@ export class CatalogsService {
   }
 
   async updateSettings(items: Array<{ key: string; value: string }>, actor: AuthUser) {
+    const summarize = (v?: string | null) => {
+      if (!v) return '';
+      return v.length > 140 ? `${v.slice(0, 140)}... (${v.length} chars)` : v;
+    };
     for (const item of items) {
       const prev = await this.prisma.systemSetting.findUnique({ where: { key: item.key } });
       await this.prisma.systemSetting.upsert({
@@ -786,11 +909,37 @@ export class CatalogsService {
         action: 'SYSTEM_SETTING_UPDATED',
         entityType: 'SystemSetting',
         entityId: item.key,
-        oldValue: prev?.value,
-        newValue: String(item.value),
+        oldValue: summarize(prev?.value),
+        newValue: summarize(String(item.value)),
       });
     }
     return this.listSettings();
+  }
+
+  saveOrgLogo(file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Chưa chọn tệp ảnh logo.');
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (!ALLOWED_LOGO_EXTS.has(ext) || !ALLOWED_LOGO_MIMES.has(file.mimetype)) {
+      throw new BadRequestException('Chỉ hỗ trợ ảnh logo định dạng PNG, JPG, WEBP hoặc SVG.');
+    }
+    const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'storage/uploads');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    const storedName = `org-logo-${uuidv4()}${ext}`;
+    fs.writeFileSync(path.join(uploadDir, storedName), file.buffer);
+    return { url: `/api/v1/public/org-logo/${storedName}`, filename: storedName };
+  }
+
+  getOrgLogoPath(filename: string) {
+    const safeName = path.basename(filename || '');
+    if (!/^org-logo-[a-zA-Z0-9-]+\.(png|jpg|jpeg|webp|svg)$/.test(safeName)) {
+      throw new NotFoundException('Không tìm thấy logo.');
+    }
+    const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'storage/uploads');
+    const fullPath = path.join(uploadDir, safeName);
+    if (!fs.existsSync(fullPath)) {
+      throw new NotFoundException('Tệp logo không tồn tại.');
+    }
+    return fullPath;
   }
 }
 
@@ -981,6 +1130,18 @@ export class CatalogsController {
     return this.service.updateSettings(body.items || [], user);
   }
 
+  @Post('settings/org-logo')
+  @RequirePermissions('settings.update')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  uploadOrgLogo(@UploadedFile() file: Express.Multer.File) {
+    return this.service.saveOrgLogo(file);
+  }
+
   @Get('audit-logs')
   @RequirePermissions('admin.audit')
   listAuditLogs(@Query() query: any) {
@@ -988,8 +1149,21 @@ export class CatalogsController {
   }
 }
 
+@ApiTags('Public Organization Logo')
+@Controller('api/v1/public/org-logo')
+export class PublicOrgLogoController {
+  constructor(private readonly service: CatalogsService) {}
+
+  @Get(':filename')
+  serveOrgLogo(@Param('filename') filename: string, @Res() res: Response) {
+    const fullPath = this.service.getOrgLogoPath(filename);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.sendFile(fullPath);
+  }
+}
+
 @Module({
   providers: [CatalogsService],
-  controllers: [CatalogsController],
+  controllers: [CatalogsController, PublicOrgLogoController],
 })
 export class CatalogsModule {}

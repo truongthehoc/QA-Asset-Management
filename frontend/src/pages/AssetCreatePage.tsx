@@ -16,6 +16,7 @@ import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useAssetStatuses } from '../contexts/AssetStatusContext';
 import { PageHeader } from '../components/UiPrimitives';
+import { CurrencyInput, DateInputVN } from '../components/FormInputs';
 import { DOC_TYPE_LABELS, formatBytes } from '../utils/format';
 
 interface PendingDoc {
@@ -480,11 +481,9 @@ export const AssetCreatePage: React.FC = () => {
             </div>
             <div>
               <label className="label-field">Ngày bàn giao</label>
-              <input
-                type="date"
+              <DateInputVN
                 value={form.handoverDate}
-                onChange={(e) => setForm({ ...form, handoverDate: e.target.value })}
-                className="input-field"
+                onChange={(iso) => setForm({ ...form, handoverDate: iso })}
               />
             </div>
             <div>
@@ -532,13 +531,10 @@ export const AssetCreatePage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="label-field">Giá mua (VND)</label>
-              <input
-                type="number"
-                min={0}
+              <label className="label-field">Giá mua (VNĐ)</label>
+              <CurrencyInput
                 value={form.purchasePrice}
-                onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })}
-                className="input-field tabular-nums"
+                onChange={(val) => setForm({ ...form, purchasePrice: val })}
                 placeholder="Nhập giá mua"
               />
             </div>
@@ -571,29 +567,23 @@ export const AssetCreatePage: React.FC = () => {
             </div>
             <div>
               <label className="label-field">Ngày mua</label>
-              <input
-                type="date"
+              <DateInputVN
                 value={form.purchaseDate}
-                onChange={(e) => setForm({ ...form, purchaseDate: e.target.value })}
-                className="input-field"
+                onChange={(iso) => setForm({ ...form, purchaseDate: iso })}
               />
             </div>
             <div>
               <label className="label-field">Bắt đầu bảo hành</label>
-              <input
-                type="date"
+              <DateInputVN
                 value={form.warrantyStartDate}
-                onChange={(e) => setForm({ ...form, warrantyStartDate: e.target.value })}
-                className="input-field"
+                onChange={(iso) => setForm({ ...form, warrantyStartDate: iso })}
               />
             </div>
             <div>
               <label className="label-field">Kết thúc bảo hành</label>
-              <input
-                type="date"
+              <DateInputVN
                 value={form.warrantyEndDate}
-                onChange={(e) => setForm({ ...form, warrantyEndDate: e.target.value })}
-                className="input-field"
+                onChange={(iso) => setForm({ ...form, warrantyEndDate: iso })}
               />
             </div>
           </div>

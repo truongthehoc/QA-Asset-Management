@@ -10,7 +10,9 @@ import { DiscoveryApprovePage } from './pages/DiscoveryApprovePage';
 import { AssetsPage } from './pages/AssetsPage';
 import { AssetCreatePage } from './pages/AssetCreatePage';
 import { AssetDetailPage } from './pages/AssetDetailPage';
+import { AssetQrPublicPage } from './pages/AssetQrPublicPage';
 import { TransfersPage } from './pages/TransfersPage';
+import { TransferActionPage } from './pages/TransferActionPage';
 import { MaintenancePage } from './pages/MaintenancePage';
 import { InventoryPage } from './pages/InventoryPage';
 import { SoftwarePage } from './pages/SoftwarePage';
@@ -45,6 +47,7 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/qr/:code" element={<AssetQrPublicPage />} />
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/discovery" element={<ProtectedRoute><DiscoveryPage /></ProtectedRoute>} />
           <Route path="/discovery/approve/:id" element={<ProtectedRoute><DiscoveryApprovePage /></ProtectedRoute>} />
@@ -52,6 +55,7 @@ export function App() {
           <Route path="/assets/new" element={<ProtectedRoute><AssetCreatePage /></ProtectedRoute>} />
           <Route path="/assets/:id" element={<ProtectedRoute><AssetDetailPage /></ProtectedRoute>} />
           <Route path="/transfers" element={<ProtectedRoute><TransfersPage /></ProtectedRoute>} />
+          <Route path="/transfers/new" element={<ProtectedRoute><TransferActionPage /></ProtectedRoute>} />
           <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
           <Route path="/software" element={<ProtectedRoute><SoftwarePage /></ProtectedRoute>} />

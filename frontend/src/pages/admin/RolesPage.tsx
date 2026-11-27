@@ -170,6 +170,12 @@ export const RolesPage: React.FC = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!feedback) return;
+    const t = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [feedback]);
+
   const selectedRole = roles.find((r) => r.id === selectedRoleId) || null;
   const isCoreSuper = selectedRole?.code === 'SYSTEM_ADMIN';
 

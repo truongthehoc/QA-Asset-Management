@@ -24,6 +24,12 @@ export const AssetCategoriesPage: React.FC = () => {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!feedback) return;
+    const t = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [feedback]);
+
   const openCreate = () => {
     setEditing(null);
     setForm({ code: '', name: '', description: '' });
@@ -65,7 +71,7 @@ export const AssetCategoriesPage: React.FC = () => {
     setFeedback(null);
     try {
       await api.delete(`/admin/asset-categories/${cat.id}`);
-      setFeedback({ type: 'ok', text: `Đã xóa nhóm tài sản "${cat.name}".` });
+      setFeedback({ type: 'err', text: `Đã xóa nhóm tài sản "${cat.name}".` });
       load();
     } catch (err: any) {
       setFeedback({

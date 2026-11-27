@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Shield, Search, RefreshCw } from 'lucide-react';
 import { api } from '../../api/client';
 import { PageHeader } from '../../components/UiPrimitives';
-import { formatDateTime } from '../../utils/format';
+import { formatDateTime, formatAuditAction } from '../../utils/format';
 
 export const AuditLogsPage: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -90,7 +90,7 @@ export const AuditLogsPage: React.FC = () => {
                     <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
                     <td className="td-cell text-xs whitespace-nowrap">{formatDateTime(l.createdAt)}</td>
                     <td className="td-cell text-xs font-medium">{l.actorName}</td>
-                    <td className="td-cell font-mono text-xs font-semibold text-brand">{l.action}</td>
+                    <td className="td-cell text-xs font-semibold text-brand">{formatAuditAction(l.action)}</td>
                     <td className="td-cell text-xs">{l.entityType}</td>
                     <td className="td-cell text-xs max-w-xs truncate" title={`${l.oldValue || ''} -> ${l.newValue || ''}`}>
                       {l.oldValue ? `${l.oldValue} → ` : ''}

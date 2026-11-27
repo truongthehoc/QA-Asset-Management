@@ -134,6 +134,7 @@ export class AssetsService {
         assetType: true,
         managingDepartment: true,
         usingDepartment: true,
+        assignedEmployee: { select: { id: true, code: true, fullName: true, title: true } },
         location: true,
         purchase: { include: { supplier: true } },
         agents: {
@@ -486,6 +487,57 @@ export class AssetsService {
       actorName: actor.fullName,
     });
     return { deleted: true };
+  }
+
+  async findPublicByCode(codeRaw: string) {
+    const code = decodeURIComponent(codeRaw || '').trim();
+    if (!code) throw new NotFoundException('Không tìm thấy tài sản.');
+    const asset = await this.prisma.asset.findFirst({
+      where: {
+        OR: [{ assetCode: code }, { id: code }],
+      },
+      select: {
+        id: true,
+        assetCode: true,
+        name: true,
+        status: true,
+        serialNumber: true,
+        manufacturer: true,
+        model: true,
+        hostname: true,
+        assignedUserName: true,
+        locationDetail: true,
+        handoverDate: true,
+        category: { select: { code: true, name: true } },
+        assetType: { select: { code: true, name: true } },
+        usingDepartment: { select: { code: true, name: true } },
+        assignedEmployee: { select: { code: true, fullName: true, title: true } },
+        location: { select: { name: true, building: true, floor: true, room: true } },
+        purchase: { select: { purchaseDate: true, warrantyStartDate: true, warrantyEndDate: true } },
+      },
+    });
+    if (!asset) throw new NotFoundException('Không tìm thấy thông tin tài sản cho mã QR này.');
+    const [statusCatalog, qrSettings] = await Promise.all([
+      this.prisma.assetStatusCatalog.findUnique({
+        where: { code: asset.status },
+        select: { code: true, name: true, bgColor: true, textColor: true },
+      }),
+      this.prisma.systemSetting.findMany({ where: { group: 'QR_LABEL' } }),
+    ]);
+    const qrMap: Record<string, string> = {};
+    for (const s of qrSettings) qrMap[s.key] = s.value;
+    return {
+      ...asset,
+      statusCatalog,
+      qrConfig: {
+        labelTitle: qrMap['qr.label_title'] ?? 'TÀI SẢN CNTT',
+        sizePx: Number(qrMap['qr.size_px']) || 180,
+        fields: (qrMap['qr.fields'] || 'assetCode,name,serialNumber,department,employee')
+          .split(',')
+          .map((x) => x.trim())
+          .filter(Boolean),
+      },
+    };
   }
 
   async getQrCode(id: string) {

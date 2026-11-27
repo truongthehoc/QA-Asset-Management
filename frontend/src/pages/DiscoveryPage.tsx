@@ -60,6 +60,12 @@ export const DiscoveryPage: React.FC = () => {
     return () => window.removeEventListener('itam:realtime-update', onRealtime);
   }, []);
 
+  useEffect(() => {
+    if (!feedback) return;
+    const t = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(t);
+  }, [feedback]);
+
   const handleIgnore = async (dev: any) => {
     const reason = window.prompt('Nhập lý do bỏ qua thiết bị này:', 'Thiết bị cá nhân / không thuộc diện quản lý');
     if (reason === null) return;
