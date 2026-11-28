@@ -15,6 +15,9 @@ import {
   ArrowLeftRight,
   Save,
   StickyNote,
+  HardDrive,
+  Battery,
+  BatteryCharging,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { api, downloadAuthorizedFile } from '../api/client';
@@ -544,22 +547,207 @@ export const AssetDetailPage: React.FC = () => {
               </div>
 
               <div className="panel overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-line text-xs font-semibold">Ổ đĩa lưu trữ ({latestSnap.disks?.length || 0})</div>
+                <div className="px-4 py-2.5 border-b border-line text-xs font-semibold">Ổ đĩa vật lý ({latestSnap.disks?.length || 0})</div>
                 <table className="w-full text-xs">
-                  <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Model</th><th className="th-cell">Loại</th><th className="th-cell">Dung lượng / Trống</th><th className="th-cell">Serial</th></tr></thead>
+                  <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Model</th><th className="th-cell">Loại</th><th className="th-cell">Dung lượng</th><th className="th-cell">Serial</th></tr></thead>
                   <tbody>
                     {(latestSnap.disks || []).map((d: any, idx: number) => (
                       <tr key={d.id}>
                         <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
                         <td className="td-cell text-xs font-medium">{d.model}</td>
                         <td className="td-cell text-xs">{d.mediaType || '—'}</td>
-                        <td className="td-cell font-mono text-xs">{d.sizeGb} GB {d.freeGb != null ? `(Trống ${d.freeGb} GB)` : ''}</td>
+                        <td className="td-cell font-mono text-xs">{d.sizeGb} GB</td>
                         <td className="td-cell font-mono text-xs text-ink-muted">{d.serialNumber || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+
+              {/* PHÂN VÙNG Ổ ĐĨA CHI TIẾT (C:, D:, E:, F: ...) */}
+              <div className="panel overflow-hidden lg:col-span-2">
+                <div className="px-4 py-2.5 border-b border-line flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-ink-primary">
+                    <HardDrive className="w-4 h-4 text-brand" />
+                    <span>Phân vùng ổ đĩa chi tiết ({latestSnap.logicalDrives?.length || 0})</span>
+                  </div>
+                  {latestSnap.logicalDrives?.length > 0 && (
+                    <span className="text-[11px] text-ink-muted font-mono">
+                      Tổng trống: {latestSnap.logicalDrives.reduce((s: number, d: any) => s + (Number(d.freeGb) || 0), 0).toFixed(1)} GB /{' '}
+                      {latestSnap.logicalDrives.reduce((s: number, d: any) => s + (Number(d.totalGb) || 0), 0).toFixed(1)} GB
+                    </span>
+                  )}
+                </div>
+                {latestSnap.logicalDrives && latestSnap.logicalDrives.length > 0 ? (
+                  <div className="p-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {latestSnap.logicalDrives.map((drv: any) => {
+                      const pct = Math.min(100, Math.max(0, Number(drv.usedPercent) || 0));
+                      const isCritical = pct >= 90;
+                      const isWarning = pct >= 75 && pct < 90;
+                      const barColor = isCritical ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-brand';
+                      const pctTextColor = isCritical ? 'text-red-600' : isWarning ? 'text-amber-600' : 'text-brand';
+                      return (
+                        <div key={drv.driveLetter} className="rounded-lg border border-line bg-surface-subtle/40 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-brand/10 text-brand font-mono font-bold text-xs">
+                                {drv.driveLetter}
+                              </span>
+                              <span className="text-xs font-medium text-ink-primary truncate">
+                                {drv.volumeName || 'Local Disk'}
+                              </span>
+                              {drv.fileSystem && (
+                                <span className="text-[10px] font-mono text-ink-muted bg-white border border-line px-1.5 py-0.5 rounded">
+                                  {drv.fileSystem}
+                                </span>
+                              )}
+                            </div>
+                            <span className={`text-xs font-mono font-bold tabular-nums ${pctTextColor}`}>
+                              {pct.toFixed(1)}%
+                            </span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] text-ink-muted font-mono tabular-nums">
+                            <span>Đã dùng: <strong className="text-ink-primary">{drv.usedGb} GB</strong></span>
+                            <span>Trống: <strong className={isCritical ? 'text-red-600' : 'text-emerald-700'}>{drv.freeGb} GB</strong> / {drv.totalGb} GB</span>
+                          </div>
+                          {(drv.diskModel || drv.diskIndex != null) && (
+                            <div className="pt-1.5 border-t border-line/70 flex items-center gap-1.5 text-[11px] text-ink-muted truncate" title={drv.diskModel || `Disk #${drv.diskIndex}`}>
+                              <HardDrive className="w-3 h-3 shrink-0 text-brand/80" />
+                              <span className="font-mono font-semibold text-ink-secondary shrink-0">
+                                {drv.diskIndex != null ? `Disk ${drv.diskIndex}` : 'Ổ vật lý'}:
+                              </span>
+                              <span className="truncate">{drv.diskModel || '—'}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="px-4 py-5 text-xs text-ink-muted">
+                    Chưa có dữ liệu chi tiết từng phân vùng (C:, D:, E:...). Cập nhật Windows Agent phiên bản mới để tự động thu thập dung lượng đã dùng và còn trống của từng ổ đĩa.
+                  </div>
+                )}
+              </div>
+
+              {/* TÌNH TRẠNG PIN LAPTOP (CHỈ HIỂN THỊ KHI THIẾT BỊ CÓ PIN) */}
+              {latestSnap.battery && (
+                <div className="panel overflow-hidden lg:col-span-2">
+                  {(() => {
+                    const bat = latestSnap.battery;
+                    const wear = bat.wearLevelPercent != null ? Number(bat.wearLevelPercent) : null;
+                    const health = bat.healthPercent != null ? Number(bat.healthPercent) : null;
+                    const charge = bat.chargePercent != null ? Number(bat.chargePercent) : null;
+
+                    const statusLabels: Record<string, { label: string; tone: string }> = {
+                      CHARGING: { label: 'Đang sạc', tone: 'bg-sky-50 text-sky-700 border-sky-200' },
+                      AC_CONNECTED: { label: 'Đang cắm nguồn (AC)', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                      FULLY_CHARGED: { label: 'Pin đầy', tone: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                      DISCHARGING: { label: 'Đang dùng pin', tone: 'bg-amber-50 text-amber-700 border-amber-200' },
+                      LOW: { label: 'Pin yếu', tone: 'bg-orange-50 text-orange-700 border-orange-200' },
+                      CRITICAL: { label: 'Pin rất yếu', tone: 'bg-red-50 text-red-700 border-red-200' },
+                    };
+                    const st = statusLabels[bat.status || ''] || { label: bat.status || 'Không rõ', tone: 'bg-slate-100 text-slate-700 border-slate-200' };
+
+                    let wearBadge = { label: 'Chưa xác định', tone: 'bg-slate-100 text-slate-600' };
+                    let wearColor = 'text-ink-primary';
+                    if (wear !== null) {
+                      if (wear < 15) {
+                        wearBadge = { label: 'Pin tốt', tone: 'bg-emerald-100 text-emerald-800' };
+                        wearColor = 'text-emerald-700';
+                      } else if (wear < 30) {
+                        wearBadge = { label: 'Bình thường', tone: 'bg-sky-100 text-sky-800' };
+                        wearColor = 'text-brand';
+                      } else if (wear < 50) {
+                        wearBadge = { label: 'Bắt đầu chai', tone: 'bg-amber-100 text-amber-800' };
+                        wearColor = 'text-amber-700';
+                      } else {
+                        wearBadge = { label: 'Chai nặng — nên thay', tone: 'bg-red-100 text-red-800' };
+                        wearColor = 'text-red-600';
+                      }
+                    }
+
+                    const isCharging = bat.status === 'CHARGING' || bat.status === 'AC_CONNECTED' || bat.status === 'FULLY_CHARGED';
+
+                    return (
+                      <>
+                        <div className="px-4 py-2.5 border-b border-line flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-ink-primary">
+                            {isCharging ? <BatteryCharging className="w-4 h-4 text-emerald-600" /> : <Battery className="w-4 h-4 text-brand" />}
+                            <span>Tình trạng Pin Laptop</span>
+                            <span className="text-ink-muted font-normal">
+                              • {bat.name || 'System Battery'}
+                              {bat.manufacturer ? ` (${bat.manufacturer})` : ''}
+                              {bat.chemistry ? ` • ${bat.chemistry}` : ''}
+                            </span>
+                          </div>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${st.tone}`}>
+                            {st.label}
+                          </span>
+                        </div>
+                        <div className="p-4 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                          <div className="rounded-lg border border-line bg-surface-subtle/40 p-3">
+                            <div className="text-[11px] text-ink-muted mb-1">Mức pin hiện tại</div>
+                            <div className="text-xl font-bold font-mono text-ink-primary tabular-nums">
+                              {charge !== null ? `${charge}%` : '—'}
+                            </div>
+                            {charge !== null && (
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 overflow-hidden mt-2">
+                                <div
+                                  className={`h-full rounded-full ${charge <= 20 ? 'bg-red-500' : charge <= 50 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                                  style={{ width: `${Math.min(100, Math.max(0, charge))}%` }}
+                                />
+                              </div>
+                            )}
+                            {bat.estimatedRunTimeMin && (
+                              <div className="text-[11px] text-ink-muted mt-1.5">
+                                Ước tính còn ~{Math.floor(bat.estimatedRunTimeMin / 60)}g {bat.estimatedRunTimeMin % 60}p
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="rounded-lg border border-line bg-surface-subtle/40 p-3">
+                            <div className="text-[11px] text-ink-muted mb-1">Độ chai pin (Wear Level)</div>
+                            <div className={`text-xl font-bold font-mono tabular-nums ${wearColor}`}>
+                              {wear !== null ? `${wear.toFixed(1)}%` : '—'}
+                            </div>
+                            <div className="mt-2">
+                              <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold ${wearBadge.tone}`}>
+                                {wearBadge.label}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border border-line bg-surface-subtle/40 p-3">
+                            <div className="text-[11px] text-ink-muted mb-1">Sức khỏe / Dung lượng sạc đầy</div>
+                            <div className="text-xl font-bold font-mono text-brand tabular-nums">
+                              {health !== null ? `${health.toFixed(1)}%` : '—'}
+                            </div>
+                            <div className="text-[11px] text-ink-muted font-mono mt-1.5 tabular-nums">
+                              {bat.fullChargeCapacityMwh && bat.designCapacityMwh
+                                ? `${Number(bat.fullChargeCapacityMwh).toLocaleString('vi-VN')} / ${Number(bat.designCapacityMwh).toLocaleString('vi-VN')} mWh`
+                                : 'Không hỗ trợ đọc mWh'}
+                            </div>
+                          </div>
+
+                          <div className="rounded-lg border border-line bg-surface-subtle/40 p-3">
+                            <div className="text-[11px] text-ink-muted mb-1">Số chu kỳ sạc (Cycle Count)</div>
+                            <div className="text-xl font-bold font-mono text-ink-primary tabular-nums">
+                              {bat.cycleCount != null ? `${bat.cycleCount} lần` : '—'}
+                            </div>
+                            <div className="text-[11px] text-ink-muted mt-1.5">
+                              {bat.cycleCount != null ? 'Ghi nhận từ ACPI/WMI' : 'Phần cứng không báo chu kỳ'}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
 
               <div className="panel overflow-hidden lg:col-span-2">
                 <div className="px-4 py-2.5 border-b border-line text-xs font-semibold">Card mạng & Màn hình</div>

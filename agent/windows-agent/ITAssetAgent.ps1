@@ -152,11 +152,155 @@ function Collect-HardwareInventory {
 
     $totalRamGb = if ($cs -and $cs.TotalPhysicalMemory) { [math]::Round($cs.TotalPhysicalMemory / 1GB, 1) } else { 0 }
     $totalDiskGb = 0
+    # Map LogicalDrive (C:, D:, E:...) -> Physical Disk (DiskIndex & Model)
+    $diskByIndex = @{}
+    foreach ($d in $disks) {
+        if ($null -ne $d.Index) {
+            $diskByIndex[[int]$d.Index] = [ordered]@{
+                index  = [int]$d.Index
+                model  = ($d.Model -as [string]).Trim()
+                serial = ($d.SerialNumber -as [string]).Trim()
+            }
+        }
+    }
+    $driveToDisk = @{}
+    try {
+        $ld2p = Get-CimInstance -ClassName Win32_LogicalDiskToPartition -ErrorAction SilentlyContinue
+        foreach ($link in $ld2p) {
+            $partId = if ($link.Antecedent -and $link.Antecedent.DeviceID) { [string]$link.Antecedent.DeviceID } else { "" }
+            $drvId  = if ($link.Dependent -and $link.Dependent.DeviceID) { ([string]$link.Dependent.DeviceID).Trim().ToUpper() } else { "" }
+            if ($drvId -and $partId -match 'Disk #(\d+)') {
+                $dIdx = [int]$Matches[1]
+                if ($diskByIndex.ContainsKey($dIdx)) {
+                    $driveToDisk[$drvId] = $diskByIndex[$dIdx]
+                } else {
+                    $driveToDisk[$drvId] = [ordered]@{ index = $dIdx; model = "Disk #$dIdx"; serial = "" }
+                }
+            }
+        }
+    } catch {}
+
     $freeDiskGb = 0
-    foreach ($ld in $logical) {
+    $logicalDriveList = @()
+    foreach ($ld in ($logical | Sort-Object DeviceID)) {
+        $sizeBytes = if ($ld.Size) { [double]$ld.Size } else { [double]0 }
+        $freeBytes = if ($ld.FreeSpace) { [double]$ld.FreeSpace } else { [double]0 }
+        $usedBytes = [math]::Max([double]0, $sizeBytes - $freeBytes)
+        $totGb = [math]::Round($sizeBytes / 1GB, 1)
+        $frGb = [math]::Round($freeBytes / 1GB, 1)
+        $usGb = [math]::Round($usedBytes / 1GB, 1)
+        $usedPct = if ($sizeBytes -gt 0) { [math]::Round(($usedBytes / $sizeBytes) * 100, 1) } else { 0 }
+
         if ($ld.Size) { $totalDiskGb += [math]::Round($ld.Size / 1GB, 0) }
         if ($ld.FreeSpace) { $freeDiskGb += [math]::Round($ld.FreeSpace / 1GB, 0) }
+
+        if ($ld.DeviceID -and $totGb -gt 0) {
+            $letter = ($ld.DeviceID -as [string]).Trim().ToUpper()
+            $phys = if ($driveToDisk.ContainsKey($letter)) { $driveToDisk[$letter] } else { $null }
+            $logicalDriveList += [ordered]@{
+                driveLetter = $letter
+                volumeName  = if ($ld.VolumeName) { ($ld.VolumeName -as [string]).Trim() } else { "" }
+                fileSystem  = if ($ld.FileSystem) { ($ld.FileSystem -as [string]).Trim() } else { "" }
+                totalGb     = $totGb
+                usedGb      = $usGb
+                freeGb      = $frGb
+                usedPercent = $usedPct
+                diskIndex   = if ($phys) { $phys.index } else { $null }
+                diskModel   = if ($phys) { $phys.model } else { $null }
+            }
+        }
     }
+
+    # Laptop Battery Info & Wear Level (returns $null on desktops without battery)
+    $batteryInfo = $null
+    try {
+        $bat = Get-CimInstance -ClassName Win32_Battery -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($bat) {
+            $designCap = 0
+            $fullCap = 0
+            $cycleCount = $null
+            $batMfg = $null
+            $batName = if ($bat.Name) { ($bat.Name -as [string]).Trim() } else { "System Battery" }
+
+            try {
+                $bStatic = Get-CimInstance -Namespace "root\wmi" -ClassName BatteryStaticData -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($bStatic) {
+                    if ($bStatic.DesignedCapacity -and [double]$bStatic.DesignedCapacity -gt 0) {
+                        $designCap = [int]$bStatic.DesignedCapacity
+                    }
+                    if ($bStatic.ManufactureName) { $batMfg = ($bStatic.ManufactureName -as [string]).Trim() }
+                    if ($bStatic.DeviceName -and ($bStatic.DeviceName -as [string]).Trim()) {
+                        $batName = ($bStatic.DeviceName -as [string]).Trim()
+                    }
+                }
+            } catch {}
+
+            try {
+                $bFull = Get-CimInstance -Namespace "root\wmi" -ClassName BatteryFullChargedCapacity -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($bFull -and $bFull.FullChargedCapacity -and [double]$bFull.FullChargedCapacity -gt 0) {
+                    $fullCap = [int]$bFull.FullChargedCapacity
+                }
+            } catch {}
+
+            try {
+                $bCycle = Get-CimInstance -Namespace "root\wmi" -ClassName BatteryCycleCount -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($bCycle -and $null -ne $bCycle.CycleCount -and [int]$bCycle.CycleCount -gt 0) {
+                    $cycleCount = [int]$bCycle.CycleCount
+                }
+            } catch {}
+
+            if ($designCap -le 0 -and $bat.DesignCapacity -and [double]$bat.DesignCapacity -gt 0) {
+                $designCap = [int]$bat.DesignCapacity
+            }
+
+            $healthPct = $null
+            $wearPct = $null
+            if ($designCap -gt 0 -and $fullCap -gt 0) {
+                $healthPct = [math]::Min([double]100, [math]::Round(([double]$fullCap / [double]$designCap) * 100, 1))
+                $wearPct = [math]::Max([double]0, [math]::Round(100 - $healthPct, 1))
+            }
+
+            $chemMap = @{
+                3 = "Lead Acid"; 4 = "NiCd"; 5 = "NiMH"; 6 = "Lithium-Ion"; 7 = "Zinc Air"; 8 = "Lithium Polymer"
+            }
+            $chem = if ($bat.Chemistry -and $chemMap.ContainsKey([int]$bat.Chemistry)) { $chemMap[[int]$bat.Chemistry] } else { "Li-Ion" }
+
+            $statusCode = [int]$bat.BatteryStatus
+            $statusStr = switch ($statusCode) {
+                1 { "DISCHARGING" }
+                2 { "AC_CONNECTED" }
+                3 { "FULLY_CHARGED" }
+                4 { "LOW" }
+                5 { "CRITICAL" }
+                6 { "CHARGING" }
+                7 { "CHARGING" }
+                8 { "CHARGING" }
+                9 { "CHARGING" }
+                11 { "CHARGING" }
+                default { "UNKNOWN" }
+            }
+
+            $estRunMin = $null
+            if ($bat.EstimatedRunTime -and [int64]$bat.EstimatedRunTime -gt 0 -and [int64]$bat.EstimatedRunTime -lt 100000) {
+                $estRunMin = [int]$bat.EstimatedRunTime
+            }
+
+            $batteryInfo = [ordered]@{
+                present               = $true
+                name                  = $batName
+                manufacturer          = $batMfg
+                chemistry             = $chem
+                status                = $statusStr
+                chargePercent         = if ($null -ne $bat.EstimatedChargeRemaining) { [int]$bat.EstimatedChargeRemaining } else { $null }
+                designCapacityMwh     = if ($designCap -gt 0) { $designCap } else { $null }
+                fullChargeCapacityMwh = if ($fullCap -gt 0) { $fullCap } else { $null }
+                healthPercent         = $healthPct
+                wearLevelPercent      = $wearPct
+                cycleCount            = $cycleCount
+                estimatedRunTimeMin   = $estRunMin
+            }
+        }
+    } catch {}
 
     $procList = @()
     foreach ($p in $procs) {
@@ -296,6 +440,8 @@ function Collect-HardwareInventory {
         processors      = $procList
         memoryModules   = $memList
         disks           = $diskList
+        logicalDrives   = $logicalDriveList
+        battery         = $batteryInfo
         networkAdapters = $nicList
         graphics        = $gpuList
         operatingSystem = [ordered]@{

@@ -376,6 +376,10 @@ export class AgentsService {
         biosSerial: payload.bios?.serialNumber || payload.biosSerial || null,
         totalRamGb,
         totalDiskGb,
+        rawPayloadJson: JSON.stringify({
+          logicalDrives: Array.isArray(payload.logicalDrives) ? payload.logicalDrives : [],
+          battery: payload.battery && typeof payload.battery === 'object' ? payload.battery : null,
+        }),
         processors: {
           create: processors.map((p: any) => ({
             name: p.name || 'Unknown CPU',

@@ -242,6 +242,30 @@ export class AssetsService {
       },
     });
     if (!asset) throw new NotFoundException('Không tìm thấy tài sản.');
+
+    // Parse extra telemetry (logicalDrives, battery) from latest snapshot's rawPayloadJson
+    if (Array.isArray(asset.agents)) {
+      for (const ag of asset.agents as any[]) {
+        if (Array.isArray(ag.snapshots)) {
+          for (const snap of ag.snapshots) {
+            let logicalDrives: any[] = [];
+            let battery: any = null;
+            if (snap.rawPayloadJson) {
+              try {
+                const parsed = JSON.parse(snap.rawPayloadJson);
+                if (Array.isArray(parsed?.logicalDrives)) logicalDrives = parsed.logicalDrives;
+                if (parsed?.battery && typeof parsed.battery === 'object') battery = parsed.battery;
+              } catch {
+                // ignore malformed legacy JSON
+              }
+            }
+            snap.logicalDrives = logicalDrives;
+            snap.battery = battery;
+          }
+        }
+      }
+    }
+
     return asset;
   }
 

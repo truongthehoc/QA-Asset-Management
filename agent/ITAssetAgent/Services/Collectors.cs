@@ -75,18 +75,74 @@ public class HardwareCollectorService
         snap.TotalRamGb = Math.Round(snap.MemoryModules.Sum(m => m.CapacityGb), 2);
 
         // Disks
-        QueryWmi("SELECT Model, SerialNumber, MediaType, InterfaceType, Size FROM Win32_DiskDrive", obj =>
+        var diskByIndex = new Dictionary<int, string>();
+        QueryWmi("SELECT Index, Model, SerialNumber, MediaType, InterfaceType, Size FROM Win32_DiskDrive", obj =>
         {
             var sizeBytes = Convert.ToDouble(obj["Size"] ?? 0);
+            var model = obj["Model"]?.ToString()?.Trim() ?? "Unknown Disk";
+            if (obj["Index"] != null)
+            {
+                diskByIndex[Convert.ToInt32(obj["Index"])] = model;
+            }
             snap.Disks.Add(new DiskInfo
             {
-                Model = obj["Model"]?.ToString()?.Trim() ?? "Unknown Disk",
+                Model = model,
                 SerialNumber = obj["SerialNumber"]?.ToString()?.Trim(),
                 MediaType = obj["MediaType"]?.ToString()?.Trim() ?? obj["InterfaceType"]?.ToString()?.Trim(),
                 SizeGb = Math.Round(sizeBytes / (1000d * 1000d * 1000d), 1),
             });
         });
         snap.TotalDiskGb = Math.Round(snap.Disks.Sum(d => d.SizeGb), 1);
+
+        // Map LogicalDrive -> Physical Disk
+        var driveToDisk = new Dictionary<string, (int Index, string Model)>(StringComparer.OrdinalIgnoreCase);
+        QueryWmi("SELECT Antecedent, Dependent FROM Win32_LogicalDiskToPartition", obj =>
+        {
+            var ant = obj["Antecedent"]?.ToString() ?? "";
+            var dep = obj["Dependent"]?.ToString() ?? "";
+            var mDisk = System.Text.RegularExpressions.Regex.Match(ant, @"Disk #(\d+)");
+            var mDrv = System.Text.RegularExpressions.Regex.Match(dep, @"DeviceID=""([A-Za-z]:)""");
+            if (mDisk.Success && mDrv.Success)
+            {
+                var idx = int.Parse(mDisk.Groups[1].Value);
+                var letter = mDrv.Groups[1].Value.ToUpper();
+                var model = diskByIndex.TryGetValue(idx, out var m) ? m : $"Disk #{idx}";
+                driveToDisk[letter] = (idx, model);
+            }
+        });
+
+        // Logical Drives (C:, D:, E:, F: ...)
+        QueryWmi("SELECT DeviceID, VolumeName, FileSystem, Size, FreeSpace FROM Win32_LogicalDisk WHERE DriveType = 3", obj =>
+        {
+            var letter = obj["DeviceID"]?.ToString()?.Trim().ToUpper();
+            var sizeBytes = Convert.ToDouble(obj["Size"] ?? 0);
+            var freeBytes = Convert.ToDouble(obj["FreeSpace"] ?? 0);
+            if (string.IsNullOrEmpty(letter) || sizeBytes <= 0) return;
+
+            var usedBytes = Math.Max(0, sizeBytes - freeBytes);
+            var totalGb = Math.Round(sizeBytes / (1024d * 1024d * 1024d), 1);
+            var freeGb = Math.Round(freeBytes / (1024d * 1024d * 1024d), 1);
+            var usedGb = Math.Round(usedBytes / (1024d * 1024d * 1024d), 1);
+            var usedPct = Math.Round((usedBytes / sizeBytes) * 100d, 1);
+            var hasPhys = driveToDisk.TryGetValue(letter, out var phys);
+
+            snap.LogicalDrives.Add(new LogicalDriveInfo
+            {
+                DriveLetter = letter,
+                VolumeName = obj["VolumeName"]?.ToString()?.Trim(),
+                FileSystem = obj["FileSystem"]?.ToString()?.Trim(),
+                TotalGb = totalGb,
+                UsedGb = usedGb,
+                FreeGb = freeGb,
+                UsedPercent = usedPct,
+                DiskIndex = hasPhys ? phys.Index : null,
+                DiskModel = hasPhys ? phys.Model : null,
+            });
+        });
+        snap.LogicalDrives = snap.LogicalDrives.OrderBy(d => d.DriveLetter).ToList();
+
+        // Laptop Battery Health & Wear Level (null on desktops)
+        snap.Battery = CollectBatteryInfo();
 
         // GPU
         QueryWmi("SELECT Name, AdapterRAM, DriverVersion FROM Win32_VideoController", obj =>
@@ -124,6 +180,101 @@ public class HardwareCollectorService
         }
 
         return snap;
+    }
+
+    private BatteryInfo? CollectBatteryInfo()
+    {
+        BatteryInfo? bat = null;
+        QueryWmi("SELECT Name, BatteryStatus, EstimatedChargeRemaining, EstimatedRunTime, DesignCapacity, Chemistry FROM Win32_Battery", obj =>
+        {
+            if (bat != null) return;
+            var statusCode = Convert.ToInt32(obj["BatteryStatus"] ?? 0);
+            var status = statusCode switch
+            {
+                1 => "DISCHARGING",
+                2 => "AC_CONNECTED",
+                3 => "FULLY_CHARGED",
+                4 => "LOW",
+                5 => "CRITICAL",
+                6 or 7 or 8 or 9 or 11 => "CHARGING",
+                _ => "UNKNOWN",
+            };
+            var chemCode = Convert.ToInt32(obj["Chemistry"] ?? 0);
+            var chem = chemCode switch
+            {
+                3 => "Lead Acid",
+                4 => "NiCd",
+                5 => "NiMH",
+                6 => "Lithium-Ion",
+                7 => "Zinc Air",
+                8 => "Lithium Polymer",
+                _ => "Li-Ion",
+            };
+            var runTime = Convert.ToInt64(obj["EstimatedRunTime"] ?? 0);
+            var designFallback = Convert.ToInt32(obj["DesignCapacity"] ?? 0);
+
+            bat = new BatteryInfo
+            {
+                Present = true,
+                Name = obj["Name"]?.ToString()?.Trim() ?? "System Battery",
+                Chemistry = chem,
+                Status = status,
+                ChargePercent = obj["EstimatedChargeRemaining"] != null ? Convert.ToInt32(obj["EstimatedChargeRemaining"]) : null,
+                DesignCapacityMwh = designFallback > 0 ? designFallback : null,
+                EstimatedRunTimeMin = (runTime > 0 && runTime < 100000) ? (int)runTime : null,
+            };
+        });
+
+        if (bat == null) return null;
+
+        try
+        {
+            using var sStatic = new ManagementObjectSearcher(@"root\wmi", "SELECT DesignedCapacity, ManufactureName, DeviceName FROM BatteryStaticData");
+            foreach (ManagementObject o in sStatic.Get())
+            {
+                var dCap = Convert.ToInt32(o["DesignedCapacity"] ?? 0);
+                if (dCap > 0) bat.DesignCapacityMwh = dCap;
+                var mfg = o["ManufactureName"]?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(mfg)) bat.Manufacturer = mfg;
+                var devName = o["DeviceName"]?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(devName)) bat.Name = devName;
+                break;
+            }
+        }
+        catch { /* Desktop / WMI unsupported */ }
+
+        try
+        {
+            using var sFull = new ManagementObjectSearcher(@"root\wmi", "SELECT FullChargedCapacity FROM BatteryFullChargedCapacity");
+            foreach (ManagementObject o in sFull.Get())
+            {
+                var fCap = Convert.ToInt32(o["FullChargedCapacity"] ?? 0);
+                if (fCap > 0) bat.FullChargeCapacityMwh = fCap;
+                break;
+            }
+        }
+        catch { }
+
+        try
+        {
+            using var sCycle = new ManagementObjectSearcher(@"root\wmi", "SELECT CycleCount FROM BatteryCycleCount");
+            foreach (ManagementObject o in sCycle.Get())
+            {
+                var cyc = Convert.ToInt32(o["CycleCount"] ?? 0);
+                if (cyc > 0) bat.CycleCount = cyc;
+                break;
+            }
+        }
+        catch { }
+
+        if (bat.DesignCapacityMwh is > 0 && bat.FullChargeCapacityMwh is > 0)
+        {
+            var health = Math.Min(100d, Math.Round((double)bat.FullChargeCapacityMwh.Value / bat.DesignCapacityMwh.Value * 100d, 1));
+            bat.HealthPercent = health;
+            bat.WearLevelPercent = Math.Max(0d, Math.Round(100d - health, 1));
+        }
+
+        return bat;
     }
 
     private void QueryWmi(string query, Action<ManagementObject> handler)

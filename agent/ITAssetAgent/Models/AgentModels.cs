@@ -114,9 +114,40 @@ public class SnapshotPayload
     public List<ProcessorInfo> Processors { get; set; } = new();
     public List<MemoryModuleInfo> MemoryModules { get; set; } = new();
     public List<DiskInfo> Disks { get; set; } = new();
+    public List<LogicalDriveInfo> LogicalDrives { get; set; } = new();
+    public BatteryInfo? Battery { get; set; }
     public List<NetworkAdapterInfo> NetworkAdapters { get; set; } = new();
     public List<GraphicInfo> Graphics { get; set; } = new();
     public List<MonitorInfo> Monitors { get; set; } = new();
     public OperatingSystemInfo? OperatingSystem { get; set; }
     public List<SoftwareItemInfo> Software { get; set; } = new();
+}
+
+public class LogicalDriveInfo
+{
+    public string DriveLetter { get; set; } = "";
+    public string? VolumeName { get; set; }
+    public string? FileSystem { get; set; }
+    public double TotalGb { get; set; }
+    public double UsedGb { get; set; }
+    public double FreeGb { get; set; }
+    public double UsedPercent { get; set; }
+    public int? DiskIndex { get; set; }
+    public string? DiskModel { get; set; }
+}
+
+public class BatteryInfo
+{
+    public bool Present { get; set; } = true;
+    public string? Name { get; set; }
+    public string? Manufacturer { get; set; }
+    public string? Chemistry { get; set; }
+    public string? Status { get; set; }
+    public int? ChargePercent { get; set; }
+    public int? DesignCapacityMwh { get; set; }
+    public int? FullChargeCapacityMwh { get; set; }
+    public double? HealthPercent { get; set; }
+    public double? WearLevelPercent { get; set; }
+    public int? CycleCount { get; set; }
+    public int? EstimatedRunTimeMin { get; set; }
 }
