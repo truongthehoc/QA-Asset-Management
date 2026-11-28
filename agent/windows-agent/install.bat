@@ -18,6 +18,12 @@ set "SRC=%~dp0"
 set "INSTALL_DIR=C:\Program Files\ITAssetAgent"
 set "DATA_DIR=C:\ProgramData\ITAssetAgent"
 
+echo [0/3] Kiem tra va dung phien ban Agent cu (neu co) de ghi de...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "foreach ($t in @('ITAssetManagementAgent','ITAssetManagementAgentTray')) { try { Stop-ScheduledTask -TaskName $t -ErrorAction SilentlyContinue } catch {}; try { Unregister-ScheduledTask -TaskName $t -Confirm:$false -ErrorAction SilentlyContinue } catch {} };" ^
+  "Get-CimInstance Win32_Process -Filter \"Name='powershell.exe' OR Name='pwsh.exe'\" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'ITAssetAgent(\.ps1|Tray\.ps1)' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue };" ^
+  "Start-Sleep -Milliseconds 800"
+
 if not exist "%INSTALL_DIR%" mkdir "%INSTALL_DIR%"
 if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 
@@ -29,7 +35,6 @@ if exist "%SRC%config.json" (
 )
 
 echo [1/3] Dang dong bo lan dau (Enroll + Snapshot)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Stop-ScheduledTask -TaskName 'ITAssetManagementAgent' -ErrorAction SilentlyContinue"
 if exist "%DATA_DIR%\state.json" del /F /Q "%DATA_DIR%\state.json"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%INSTALL_DIR%\ITAssetAgent.ps1" -Mode Once -ConfigPath "%DATA_DIR%\config.json"
 
