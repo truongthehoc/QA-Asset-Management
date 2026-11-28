@@ -862,11 +862,13 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                               const isCritical = n.severity === 'CRITICAL';
                               const isWarn = n.severity === 'HIGH' || n.severity === 'MEDIUM';
                               const targetLink =
-                                n.scope === 'LICENSE'
-                                  ? n.link || '/software'
-                                  : n.scope === 'CONTRACT'
-                                    ? n.link || '/contracts'
-                                    : `/alerts?tab=alerts&alertId=${encodeURIComponent(nid)}`;
+                                n.scope === 'CHANGE'
+                                  ? n.link || '/alerts?tab=changes'
+                                  : n.scope === 'LICENSE'
+                                    ? n.link || '/software'
+                                    : n.scope === 'CONTRACT'
+                                      ? n.link || '/contracts'
+                                      : `/alerts?tab=alerts&alertId=${encodeURIComponent(nid)}`;
 
                               return (
                                 <button

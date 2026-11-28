@@ -9,7 +9,7 @@ export class DashboardService {
 
   async getOverview(user: AuthUser) {
     const scopeWhere = buildAssetScopeWhere(user);
-    const [assets, licenses, contracts, pendingApproval, offlineSetting, allAgents, alerts, recentChanges] =
+    const [assets, licenses, contracts, pendingApproval, pendingConfigChanges, pendingChangesList, offlineSetting, allAgents, alerts, recentChanges] =
       await Promise.all([
         this.prisma.asset.findMany({
           where: scopeWhere,
@@ -33,6 +33,18 @@ export class DashboardService {
         }),
         this.prisma.discoveredDevice.count({
           where: { approvalStatus: { in: ['PENDING', 'VERIFY_CONFLICT'] } },
+        }),
+        this.prisma.deviceChange.count({
+          where: { status: 'PENDING' },
+        }),
+        this.prisma.deviceChange.findMany({
+          where: { status: 'PENDING' },
+          include: {
+            asset: { select: { id: true, assetCode: true, name: true, hostname: true } },
+            agent: { select: { agentUid: true, hostname: true } },
+          },
+          orderBy: { detectedAt: 'desc' },
+          take: 15,
         }),
         this.prisma.systemSetting.findUnique({ where: { key: 'agent.offline_threshold_min' } }),
         this.prisma.deviceAgent.findMany({
@@ -87,12 +99,12 @@ export class DashboardService {
     ).length;
     const agentsOnline = allAgents.length - agentsOffline;
 
-    const unresolvedConfigAlerts = await this.prisma.alertEvent.count({
+    const openAlertsCount = await this.prisma.alertEvent.count({
       where: {
-        category: { in: ['CONFIG_CHANGE', 'SOFTWARE'] },
         status: { in: ['NEW', 'ACKNOWLEDGED', 'IN_PROGRESS'] },
       },
     });
+    const unresolvedConfigAlerts = pendingConfigChanges + openAlertsCount;
 
     // 2. Software License KPIs & Expiry Analytics
     let totalLicenses = 0;
@@ -390,12 +402,24 @@ export class DashboardService {
       }
     }
 
+    const configChangeAlerts = pendingChangesList.map((ch) => ({
+      id: `change-${ch.id}`,
+      scope: 'CHANGE' as const,
+      severity: ch.severity || 'HIGH',
+      title: `Thay đổi ${ch.component} trên ${ch.asset?.assetCode || ch.agent?.hostname || 'thiết bị'}`,
+      message: `${ch.previousValue || '—'} → ${ch.newValue || '—'}`,
+      detectedAt: ch.detectedAt.toISOString(),
+      link: `/alerts?tab=changes&changeId=${ch.id}`,
+      badgeLabel: 'Chờ xác minh',
+    }));
+
     return {
       kpis: {
         totalAssets,
         inUse,
         unallocated,
         pendingApproval,
+        pendingConfigChanges,
         maintenance,
         warrantyExpiring,
         warrantyExpired,
@@ -431,7 +455,7 @@ export class DashboardService {
           { name: 'Nghiêm trọng', key: 'CRITICAL', value: sevCounts.CRITICAL },
         ],
       },
-      alertCenter: [...contractAlerts, ...licenseAlerts, ...openAssetAlerts].slice(0, 25),
+      alertCenter: [...configChangeAlerts, ...contractAlerts, ...licenseAlerts, ...openAssetAlerts].slice(0, 30),
       expiringLicenseList: expiringLicenseList.slice(0, 8),
       recentAlerts: alerts.slice(0, 8),
       recentChanges,

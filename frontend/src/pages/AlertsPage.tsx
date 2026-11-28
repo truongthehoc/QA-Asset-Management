@@ -12,6 +12,7 @@ export const AlertsPage: React.FC = () => {
   const { prompt } = useDialog();
   const [searchParams] = useSearchParams();
   const focusedAlertId = searchParams.get('alertId') || '';
+  const focusedChangeId = searchParams.get('changeId') || '';
   const initialTab =
     searchParams.get('tab') === 'alerts' || focusedAlertId
       ? 'alerts'
@@ -47,7 +48,10 @@ export const AlertsPage: React.FC = () => {
   useEffect(() => {
     const qTab = searchParams.get('tab');
     const qAlertId = searchParams.get('alertId');
-    if (qAlertId || qTab === 'alerts') {
+    const qChangeId = searchParams.get('changeId');
+    if (qChangeId || qTab === 'changes') {
+      setTab('changes');
+    } else if (qAlertId || qTab === 'alerts') {
       setTab('alerts');
     } else if (qTab === 'rules') {
       setTab('rules');
@@ -55,12 +59,18 @@ export const AlertsPage: React.FC = () => {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!focusedAlertId || tab !== 'alerts' || alerts.length === 0) return;
-    const el = document.getElementById(`alert-row-${focusedAlertId}`);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (focusedAlertId && tab === 'alerts' && alerts.length > 0) {
+      const el = document.getElementById(`alert-row-${focusedAlertId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }, [focusedAlertId, tab, alerts]);
+
+  useEffect(() => {
+    if (focusedChangeId && tab === 'changes' && changes.length > 0) {
+      const el = document.getElementById(`change-row-${focusedChangeId}`);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [focusedChangeId, tab, changes]);
 
   useEffect(() => {
     if (!notice) return;
@@ -117,6 +127,7 @@ export const AlertsPage: React.FC = () => {
           : `Đã từ chối thay đổi trên ${change.asset?.assetCode || change.agent?.hostname}; Baseline cũ được giữ nguyên.`,
     });
     load();
+    window.dispatchEvent(new Event('itam:refresh-badges'));
   };
 
   const handleAlertStatus = async (alertId: string, status: string) => {
@@ -132,6 +143,7 @@ export const AlertsPage: React.FC = () => {
     if (notes === null) return;
     await api.patch(`/alerts/${alertId}/status`, { status, notes });
     load();
+    window.dispatchEvent(new Event('itam:refresh-badges'));
   };
 
   const handleRuleUpdate = async (rule: any, patch: any) => {
@@ -246,7 +258,17 @@ export const AlertsPage: React.FC = () => {
                   <tr><td colSpan={8} className="td-cell text-center text-ink-muted py-10">Không có thay đổi cấu hình nào.</td></tr>
                 ) : (
                   changes.map((ch, idx) => (
-                    <tr key={ch.id} className={ch.status === 'PENDING' ? 'bg-amber-50/30' : 'hover:bg-slate-50/70'}>
+                    <tr
+                      key={ch.id}
+                      id={`change-row-${ch.id}`}
+                      className={
+                        focusedChangeId === ch.id
+                          ? 'bg-sky-50/90 ring-2 ring-inset ring-brand/40 transition-colors'
+                          : ch.status === 'PENDING'
+                            ? 'bg-amber-50/30'
+                            : 'hover:bg-slate-50/70'
+                      }
+                    >
                       <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
                       <td className="td-cell">
                         {ch.asset ? (
