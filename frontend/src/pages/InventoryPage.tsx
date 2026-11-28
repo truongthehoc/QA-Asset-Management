@@ -3,6 +3,7 @@ import { Plus, QrCode, CheckCircle2, ClipboardList } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { PageHeader, Modal, InventoryStatusBadge, Badge } from '../components/UiPrimitives';
+import { DateInputVN } from '../components/FormInputs';
 import { formatDate } from '../utils/format';
 
 export const InventoryPage: React.FC = () => {
@@ -79,7 +80,7 @@ export const InventoryPage: React.FC = () => {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Kiểm kê tài sản CNTT"
+        title="Kiểm kê tài sản"
         subtitle="Tạo đợt kiểm kê toàn công ty hoặc theo phòng ban, quét mã QR đối chiếu thực tế và ghi nhận sai lệch vị trí, người dùng, cấu hình."
         actions={
           can('inventory.manage') && (
@@ -192,7 +193,12 @@ export const InventoryPage: React.FC = () => {
                           </td>
                           <td className="td-cell text-xs text-ink-secondary">
                             {it.discrepancyNotes || it.actualCondition || '—'}
-                            {it.checkedBy && <div className="text-[11px] text-ink-muted">Bởi {it.checkedBy}</div>}
+                            {it.checkedBy && (
+                              <div className="text-[11px] text-ink-muted">
+                                Bởi {it.checkedBy}
+                                {it.checkedAt ? ` • ${formatDate(it.checkedAt)}` : ''}
+                              </div>
+                            )}
                           </td>
                           <td className="td-cell text-right">
                             {activeSession.status !== 'COMPLETED' && can('inventory.manage') && (
@@ -245,7 +251,10 @@ export const InventoryPage: React.FC = () => {
             </div>
             <div>
               <label className="label-field">Hạn hoàn thành</label>
-              <input type="date" value={newForm.dueDate} onChange={(e) => setNewForm({ ...newForm, dueDate: e.target.value })} className="input-field" />
+              <DateInputVN
+                value={newForm.dueDate}
+                onChange={(iso) => setNewForm({ ...newForm, dueDate: iso })}
+              />
             </div>
           </div>
           <div>

@@ -93,7 +93,7 @@ export const AssetCategoriesPage: React.FC = () => {
     <div className="space-y-5">
       <PageHeader
         title="Danh mục Nhóm tài sản"
-        subtitle="Phân nhóm tổng thể tài sản CNTT để tổ chức các loại tài sản và tổng hợp báo cáo."
+        subtitle="Phân nhóm tổng thể tài sản để tổ chức các loại tài sản và tổng hợp báo cáo."
         actions={
           can('admin.catalogs') && (
             <button onClick={openCreate} className="btn-primary">

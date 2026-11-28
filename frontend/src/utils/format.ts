@@ -73,7 +73,9 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   BASELINE_CONFIRMED: 'Xác nhận Baseline cấu hình',
   CHANGE_APPROVED: 'Phê duyệt thay đổi cấu hình',
   CHANGE_REJECTED: 'Từ chối thay đổi cấu hình',
+  MAINTENANCE: 'Bảo trì / Sửa chữa',
   MAINTENANCE_CREATED: 'Tạo phiếu bảo trì / sửa chữa',
+  MAINTENANCE_UPDATED: 'Cập nhật phiếu bảo trì',
   MAINTENANCE_COMPLETED: 'Hoàn tất bảo trì / sửa chữa',
   DISPOSED: 'Thanh lý tài sản',
   INVENTORY_CHECKED: 'Xác nhận kiểm kê',
@@ -140,4 +142,103 @@ export const DOC_TYPE_LABELS: Record<string, string> = {
   PHOTO: 'Hình ảnh thiết bị',
   MAINTENANCE: 'Biên bản sửa chữa',
   OTHER: 'Tài liệu khác',
+};
+
+export const MAINTENANCE_STATUS_META: Record<string, { label: string; cls: string; dot: string }> = {
+  OPEN: { label: 'Chờ tiếp nhận', cls: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500' },
+  IN_PROGRESS: { label: 'Đang sửa chữa', cls: 'bg-amber-50 text-amber-800 border-amber-200', dot: 'bg-amber-500' },
+  WAITING_PARTS: { label: 'Chờ linh kiện', cls: 'bg-violet-50 text-violet-700 border-violet-200', dot: 'bg-violet-500' },
+  COMPLETED: { label: 'Hoàn thành', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
+  CANCELLED: { label: 'Đã hủy', cls: 'bg-red-50 text-red-700 border-red-200', dot: 'bg-red-500' },
+};
+
+export const MAINTENANCE_TYPE_META: Record<string, { label: string; desc: string; cls: string }> = {
+  REPAIR: {
+    label: 'Sửa chữa sự cố',
+    desc: 'Khắc phục lỗi phần cứng, phần mềm hoặc hỏng hóc thiết bị',
+    cls: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  PREVENTIVE: {
+    label: 'Bảo trì định kỳ',
+    desc: 'Vệ sinh, kiểm tra hiệu năng, bảo dưỡng theo lịch định kỳ',
+    cls: 'bg-teal-50 text-teal-700 border-teal-200',
+  },
+  UPGRADE: {
+    label: 'Nâng cấp phần cứng',
+    desc: 'Thay thế hoặc bổ sung RAM, SSD, pin và linh kiện mới',
+    cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  },
+  WARRANTY_CLAIM: {
+    label: 'Gửi bảo hành hãng',
+    desc: 'Gửi thiết bị đến trung tâm bảo hành hoặc nhà cung cấp',
+    cls: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+};
+
+export const DISPOSAL_METHOD_META: Record<string, { label: string; desc: string; cls: string }> = {
+  LIQUIDATION: {
+    label: 'Thanh lý / Bán đấu giá',
+    desc: 'Bán thanh lý thu hồi một phần giá trị tài sản theo quyết định',
+    cls: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  SCRAP: {
+    label: 'Hủy bỏ / Phế liệu',
+    desc: 'Thiết bị hỏng nặng không thể sửa chữa, tiêu hủy hoặc bán phế liệu',
+    cls: 'bg-rose-50 text-rose-700 border-rose-200',
+  },
+  DONATION: {
+    label: 'Chuyển giao / Tặng cho',
+    desc: 'Chuyển giao ra ngoài đơn vị, tài trợ hoặc quyên góp',
+    cls: 'bg-teal-50 text-teal-700 border-teal-200',
+  },
+  RETURN_VENDOR: {
+    label: 'Trả lại nhà cung cấp',
+    desc: 'Hoàn trả thiết bị thuê, mượn hoặc thu hồi theo cam kết hãng',
+    cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  },
+};
+
+export const LICENSE_TYPE_META: Record<string, { label: string; desc: string; cls: string }> = {
+  SUBSCRIPTION: {
+    label: 'Thuê bao định kỳ',
+    desc: 'Gia hạn theo tháng hoặc năm (Microsoft 365, Adobe CC, AutoCAD...)',
+    cls: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
+  PERPETUAL: {
+    label: 'Bản quyền vĩnh viễn',
+    desc: 'Mua một lần sử dụng không giới hạn thời gian',
+    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  },
+  VOLUME: {
+    label: 'Volume / Doanh nghiệp',
+    desc: 'Gói bản quyền số lượng lớn (MAK/KMS) cấp cho nhiều máy',
+    cls: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  },
+  OEM: {
+    label: 'OEM theo máy',
+    desc: 'Bản quyền gắn cố định theo phần cứng thiết bị khi mua',
+    cls: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  FLOATING: {
+    label: 'Floating / Dùng chung',
+    desc: 'Bản quyền cấp phát động theo số người dùng đồng thời',
+    cls: 'bg-violet-50 text-violet-700 border-violet-200',
+  },
+};
+
+export const LICENSE_STATUS_META: Record<string, { label: string; cls: string }> = {
+  ACTIVE: { label: 'Đang hiệu lực', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  EXPIRING_SOON: { label: 'Sắp hết hạn', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+  EXPIRED: { label: 'Đã hết hạn', cls: 'bg-red-50 text-red-700 border-red-200' },
+  REVOKED: { label: 'Đã thu hồi', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+  CANCELLED: { label: 'Đã hủy', cls: 'bg-red-50 text-red-700 border-red-200' },
+};
+
+export const LICENSE_DOC_TYPES: Record<string, string> = {
+  CONTRACT: 'Hợp đồng bản quyền',
+  INVOICE: 'Hóa đơn mua sắm',
+  CERTIFICATE: 'Chứng nhận bản quyền (Certificate)',
+  PO: 'Đơn đặt hàng (PO)',
+  HANDOVER: 'Biên bản bàn giao',
+  OTHER: 'Chứng từ khác',
 };

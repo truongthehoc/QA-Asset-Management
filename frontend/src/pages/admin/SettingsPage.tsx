@@ -17,10 +17,12 @@ import {
   Building2,
   FileText,
   Upload,
+  Info,
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { PageHeader, Badge } from '../../components/UiPrimitives';
 import { AssetQrLabel, QR_FIELD_OPTIONS } from '../../components/AssetQrLabel';
+import { BUILD_VERSION } from '../../version';
 
 const DOC_HEADER_FIELD_OPTIONS: Array<{ key: string; label: string }> = [
   { key: 'logo', label: 'Logo đơn vị' },
@@ -46,6 +48,13 @@ const GROUP_LIST: GroupConfig[] = [
     title: 'Thông tin đơn vị / Doanh nghiệp',
     desc: 'Cập nhật tên đơn vị, địa chỉ, mã số thuế và logo để hiển thị đồng bộ trên các biên bản bàn giao, điều chuyển, thu hồi.',
     icon: Building2,
+  },
+  {
+    id: 'APP_INFO',
+    shortTitle: 'Thông tin phần mềm',
+    title: 'Thông tin phần mềm & Phiên bản',
+    desc: 'Cấu hình tên phần mềm trên Sidebar, phiên bản (tự tăng mỗi lần deploy) và đơn vị phát triển hiển thị tại Footer và Form đăng nhập.',
+    icon: Info,
   },
   {
     id: 'DOCUMENT_TEMPLATE',
@@ -223,6 +232,21 @@ const FIELD_META: Record<string, FieldMeta> = {
     label: 'Logo đơn vị',
     help: 'Tải lên ảnh logo (PNG/JPG/SVG/WEBP, tối đa 5MB) hoặc dán đường dẫn ảnh.',
     kind: 'logo',
+  },
+  'app.name': {
+    label: 'Tên phần mềm',
+    help: 'Hiển thị trên thanh điều hướng (Sidebar) và tiêu đề trình duyệt.',
+    kind: 'text',
+  },
+  'app.version': {
+    label: 'Phiên bản phần mềm (để trống = tự động tăng mỗi lần deploy)',
+    help: `Phiên bản build/deploy tự động hiện tại: v${BUILD_VERSION}. Chỉ nhập vào ô này nếu bạn muốn cố định một mã phiên bản thủ công.`,
+    kind: 'text',
+  },
+  'app.developed_by': {
+    label: 'Phát triển bởi',
+    help: 'Hiển thị ở thanh Footer cố định cuối trang và tại Form đăng nhập.',
+    kind: 'text',
   },
   'doc.department_subtitle': {
     label: 'Tên bộ phận phụ trách trên biên bản',
@@ -896,12 +920,12 @@ export const SettingsPage: React.FC = () => {
                       serialNumber: 'DL-7010-98234',
                       usingDepartment: { name: 'Phòng Công nghệ Thông tin' },
                       assignedEmployee: { code: 'NV001', fullName: 'Nguyễn Văn A' },
-                      location: { name: 'Tầng 3 - Khu CNTT' },
+                      location: { name: 'Tầng 3 - Văn phòng' },
                       handoverDate: new Date().toISOString(),
                       purchase: { warrantyEndDate: new Date(Date.now() + 365 * 86400_000).toISOString() },
                     }}
                     config={{
-                      labelTitle: draft['qr.label_title'] ?? 'TÀI SẢN CNTT',
+                      labelTitle: draft['qr.label_title'] ?? 'TÀI SẢN',
                       sizePx: Number(draft['qr.size_px']) || 180,
                       fields: (draft['qr.fields'] || '')
                         .split(',')

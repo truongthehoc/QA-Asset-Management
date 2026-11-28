@@ -31,7 +31,15 @@ import {
   InventoryStatusBadge,
   Badge,
 } from '../components/UiPrimitives';
-import { formatDate, formatDateTime, formatVnd, formatBytes, DOC_TYPE_LABELS, formatAuditAction } from '../utils/format';
+import {
+  formatDate,
+  formatDateTime,
+  formatVnd,
+  formatBytes,
+  DOC_TYPE_LABELS,
+  formatAuditAction,
+  MAINTENANCE_STATUS_META,
+} from '../utils/format';
 
 const TABS = [
   { id: 'overview', label: '1. Tổng quan' },
@@ -1124,6 +1132,14 @@ export const AssetDetailPage: React.FC = () => {
       {/* TAB 9: BẢO TRÌ */}
       {tab === 'maintenance' && (
         <div className="panel overflow-hidden">
+          <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-2">
+            <span className="text-sm font-semibold">Phiếu bảo trì & sửa chữa ({maintenancesPg.totalItems})</span>
+            {can('maintenance.manage') && asset.status !== 'DISPOSED' && (
+              <Link to={`/maintenance/new?assetId=${asset.id}`} className="btn-primary px-2.5 py-1 text-xs">
+                + Lập phiếu bảo trì
+              </Link>
+            )}
+          </div>
           <div className="overflow-x-auto">
           <table className="w-full">
             <thead><tr><th className="th-cell w-12 text-center">STT</th><th className="th-cell">Mã phiếu</th><th className="th-cell">Tình trạng / Nội dung</th><th className="th-cell">Đơn vị sửa chữa</th><th className="th-cell">Linh kiện</th><th className="th-cell">Chi phí</th><th className="th-cell">Trạng thái</th></tr></thead>
@@ -1131,20 +1147,27 @@ export const AssetDetailPage: React.FC = () => {
               {maintenancesPg.totalItems === 0 ? (
                 <tr><td colSpan={7} className="td-cell text-center text-ink-muted py-8">Chưa có phiếu sửa chữa / bảo trì.</td></tr>
               ) : (
-                maintenancesPg.paginated.map((m: any, idx: number) => (
-                  <tr key={m.id}>
+                maintenancesPg.paginated.map((m: any, idx: number) => {
+                  const stMeta = MAINTENANCE_STATUS_META[m.status] || { label: m.status, cls: 'bg-slate-100 text-slate-700 border-slate-200' };
+                  return (
+                  <tr key={m.id} className="hover:bg-slate-50/70">
                     <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{maintenancesPg.startIndex + idx + 1}</td>
-                    <td className="td-cell font-mono text-xs font-semibold">{m.ticketCode}</td>
+                    <td className="td-cell font-mono text-xs font-semibold">
+                      <Link to={`/maintenance/${m.id}`} className="text-brand hover:underline">
+                        {m.ticketCode}
+                      </Link>
+                    </td>
                     <td className="td-cell text-xs">
                       <div className="font-medium">{m.issueSummary}</div>
                       <div className="text-ink-muted">{m.workPerformed || ''}</div>
                     </td>
-                    <td className="td-cell text-xs">{m.vendorName || '—'}</td>
+                    <td className="td-cell text-xs">{m.vendorName || 'Nội bộ IT'}</td>
                     <td className="td-cell text-xs">{m.replacedParts || '—'}</td>
                     <td className="td-cell font-mono text-xs tabular-nums">{formatVnd(m.cost)}</td>
-                    <td className="td-cell"><Badge label={m.status} /></td>
+                    <td className="td-cell"><Badge label={stMeta.label} cls={stMeta.cls} /></td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>

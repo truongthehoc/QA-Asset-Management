@@ -136,7 +136,7 @@ export const AssetTypesPage: React.FC = () => {
     <div className="space-y-5">
       <PageHeader
         title="Danh mục Loại tài sản"
-        subtitle="Phân loại tài sản CNTT, thứ tự ưu tiên hiển thị trong dropdown, mã tiền tố ({TYPE}) và cấu hình hỗ trợ Windows Agent."
+        subtitle="Phân loại tài sản, thứ tự ưu tiên hiển thị trong dropdown, mã tiền tố ({TYPE}) và cấu hình hỗ trợ Windows Agent."
         actions={
           can('admin.catalogs') && (
             <button onClick={openCreate} className="btn-primary">

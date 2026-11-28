@@ -50,7 +50,7 @@ export const HandoverReceipt: React.FC<{ data: ReceiptData }> = ({ data }) => {
   const subtitleMap = {
     HANDOVER: 'Ghi nhận việc cấp phát, bàn giao tài sản cho đơn vị / nhân viên sử dụng',
     TRANSFER: 'Ghi nhận việc điều chuyển quyền sử dụng tài sản giữa các đơn vị / nhân sự',
-    RETURN: 'Ghi nhận việc thu hồi tài sản đang sử dụng trả về Kho thiết bị CNTT',
+    RETURN: 'Ghi nhận việc thu hồi tài sản đang sử dụng trả về Kho thiết bị',
   };
 
   const d = data.date ? new Date(data.date) : new Date();
@@ -77,7 +77,7 @@ export const HandoverReceipt: React.FC<{ data: ReceiptData }> = ({ data }) => {
       ? data.docTemplate.headerFields
       : ['logo', 'name', 'address', 'taxCode', 'departmentSubtitle', 'nationalMotto'],
   );
-  const orgName = data.orgInfo?.name?.trim() || data.companyName?.trim() || 'HỆ THỐNG QUẢN LÝ TÀI SẢN CNTT';
+  const orgName = data.orgInfo?.name?.trim() || data.companyName?.trim() || 'HỆ THỐNG QUẢN LÝ TÀI SẢN';
   const orgAddress = data.orgInfo?.address?.trim() || '';
   const orgTaxCode = data.orgInfo?.taxCode?.trim() || '';
   const orgLogoUrl = data.orgInfo?.logoUrl?.trim() || '';

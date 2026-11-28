@@ -111,9 +111,11 @@ export const LoginPage: React.FC = () => {
           <div className="relative z-10">
             <div className="inline-flex items-center gap-3">
               {branding.logoUrl ? (
-                <div className="w-11 h-11 rounded-xl bg-white p-1.5 flex items-center justify-center shadow-sm shrink-0 overflow-hidden">
-                  <img src={branding.logoUrl} alt="Logo đơn vị" className="max-h-full max-w-full object-contain" />
-                </div>
+                <img
+                  src={branding.logoUrl}
+                  alt="Logo đơn vị"
+                  className="h-10 w-auto max-w-[48px] object-contain shrink-0"
+                />
               ) : (
                 <div className="w-10 h-10 rounded-xl bg-white/15 border border-white/25 backdrop-blur-sm flex items-center justify-center shadow-sm shrink-0">
                   <ShieldCheck className="w-5 h-5 text-white" />
@@ -121,14 +123,16 @@ export const LoginPage: React.FC = () => {
               )}
               <div className="min-w-0">
                 <div className="text-sm font-semibold tracking-wide text-white truncate">
-                  {branding.name || 'IT Asset Mgmt'}
+                  {branding.appName || 'Quản lý tài sản'}
                 </div>
-                <div className="text-[11px] text-white/75">Quản lý tài sản CNTT</div>
+                {branding.name && (
+                  <div className="text-[11px] text-white/75 truncate">{branding.name}</div>
+                )}
               </div>
             </div>
 
             <h1 className="mt-8 text-2xl font-bold tracking-tight leading-snug text-white">
-              Quản lý tài sản CNTT tập trung
+              Quản lý tài sản tập trung
             </h1>
             <p className="mt-2.5 text-sm text-white/80 leading-relaxed">
               Theo dõi toàn bộ vòng đời thiết bị, cấu hình phần cứng thực tế và hồ sơ chứng từ trong một nền tảng thống nhất.
@@ -174,7 +178,7 @@ export const LoginPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Bottom Copyright */}
+          {/* Bottom Status */}
           <div className="relative z-10 mt-8 pt-5 border-t border-white/15 flex items-center justify-between text-[11px] text-white/70">
             <span>Hệ thống quản trị nội bộ</span>
             <span className="inline-flex items-center gap-1.5">
@@ -199,7 +203,7 @@ export const LoginPage: React.FC = () => {
                 </div>
               )}
               <h1 className="text-lg font-bold text-ink-primary tracking-tight">
-                {branding.name || 'Quản lý tài sản CNTT'}
+                {branding.name || 'Quản lý tài sản'}
               </h1>
               <p className="text-xs text-ink-muted mt-0.5">Đăng nhập hệ thống</p>
             </div>
@@ -280,9 +284,9 @@ export const LoginPage: React.FC = () => {
               </button>
             </form>
 
-            <div className="hidden md:flex mt-8 pt-5 border-t border-line items-center justify-between text-xs text-ink-muted">
-              <span>Bảo mật theo phân quyền RBAC</span>
-              <span>Liên hệ bộ phận IT nếu cần cấp tài khoản</span>
+            <div className="mt-6 sm:mt-8 pt-4 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-1.5 text-xs text-ink-muted">
+              <span>Phát triển bởi <strong className="font-medium text-ink-secondary">{branding.developedBy}</strong></span>
+              <span className="font-mono text-[11px]">Phiên bản <strong className="text-brand">v{branding.version}</strong></span>
             </div>
           </div>
         </div>

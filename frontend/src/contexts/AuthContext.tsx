@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../api/client';
 
 export interface UserProfile {
@@ -6,9 +6,14 @@ export interface UserProfile {
   username: string;
   fullName: string;
   email: string;
-  title?: string;
+  phone?: string | null;
+  title?: string | null;
+  avatarUrl?: string | null;
+  employeeCode?: string | null;
   departmentId: string | null;
   departmentName?: string | null;
+  lastLoginAt?: string | null;
+  createdAt?: string | null;
   roles: string[];
   roleNames?: string[];
   permissions: string[];
@@ -20,6 +25,8 @@ interface AuthContextValue {
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   can: (perm: string) => boolean;
+  refreshProfile: () => Promise<void>;
+  updateLocalUser: (next: UserProfile) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -35,6 +42,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [loading, setLoading] = useState(true);
 
+  const updateLocalUser = useCallback((next: UserProfile) => {
+    setUser(next);
+    localStorage.setItem('itam_user', JSON.stringify(next));
+  }, []);
+
+  const refreshProfile = useCallback(async () => {
+    const token = localStorage.getItem('itam_token');
+    if (!token) return;
+    const res = await api.get('/auth/me');
+    updateLocalUser(res.data);
+  }, [updateLocalUser]);
+
   useEffect(() => {
     const token = localStorage.getItem('itam_token');
     if (!token) {
@@ -44,9 +63,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     api
       .get('/auth/me')
       .then((res) => {
-        const merged = { ...(user || {}), ...res.data };
-        setUser(merged);
-        localStorage.setItem('itam_user', JSON.stringify(merged));
+        updateLocalUser(res.data);
       })
       .catch(() => {
         localStorage.removeItem('itam_token');
@@ -54,13 +71,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(null);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [updateLocalUser]);
 
   const login = async (username: string, password: string) => {
     const res = await api.post('/auth/login', { username, password });
     localStorage.setItem('itam_token', res.data.accessToken);
-    localStorage.setItem('itam_user', JSON.stringify(res.data.user));
-    setUser(res.data.user);
+    updateLocalUser(res.data.user);
   };
 
   const logout = () => {
@@ -88,7 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, can }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, can, refreshProfile, updateLocalUser }}>
       {children}
     </AuthContext.Provider>
   );

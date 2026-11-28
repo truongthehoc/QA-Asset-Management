@@ -15,8 +15,13 @@ import { AssetQrPublicPage } from './pages/AssetQrPublicPage';
 import { TransfersPage } from './pages/TransfersPage';
 import { TransferActionPage } from './pages/TransferActionPage';
 import { MaintenancePage } from './pages/MaintenancePage';
+import { MaintenanceCreatePage } from './pages/MaintenanceCreatePage';
+import { MaintenanceDetailPage } from './pages/MaintenanceDetailPage';
+import { DisposalCreatePage } from './pages/DisposalCreatePage';
 import { InventoryPage } from './pages/InventoryPage';
 import { SoftwarePage } from './pages/SoftwarePage';
+import { SoftwareLicenseCreatePage } from './pages/SoftwareLicenseCreatePage';
+import { SoftwareLicenseDetailPage } from './pages/SoftwareLicenseDetailPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { DepartmentsPage } from './pages/admin/DepartmentsPage';
@@ -31,6 +36,8 @@ import { RolesPage } from './pages/admin/RolesPage';
 import { SettingsPage } from './pages/admin/SettingsPage';
 import { AgentManagementPage } from './pages/admin/AgentManagementPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
+import { ProfilePage } from './pages/ProfilePage';
+import { SoftwareInfoPage } from './pages/SoftwareInfoPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -59,9 +66,16 @@ export function App() {
           <Route path="/transfers" element={<ProtectedRoute><TransfersPage /></ProtectedRoute>} />
           <Route path="/transfers/new" element={<ProtectedRoute><TransferActionPage /></ProtectedRoute>} />
           <Route path="/maintenance" element={<ProtectedRoute><MaintenancePage /></ProtectedRoute>} />
+          <Route path="/maintenance/new" element={<ProtectedRoute><MaintenanceCreatePage /></ProtectedRoute>} />
+          <Route path="/maintenance/disposals/new" element={<ProtectedRoute><DisposalCreatePage /></ProtectedRoute>} />
+          <Route path="/maintenance/:id" element={<ProtectedRoute><MaintenanceDetailPage /></ProtectedRoute>} />
           <Route path="/inventory" element={<ProtectedRoute><InventoryPage /></ProtectedRoute>} />
           <Route path="/software" element={<ProtectedRoute><SoftwarePage /></ProtectedRoute>} />
+          <Route path="/software/licenses/new" element={<ProtectedRoute><SoftwareLicenseCreatePage /></ProtectedRoute>} />
+          <Route path="/software/licenses/:id" element={<ProtectedRoute><SoftwareLicenseDetailPage /></ProtectedRoute>} />
           <Route path="/alerts" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+          <Route path="/about" element={<ProtectedRoute><SoftwareInfoPage /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
 
           {/* Danh mục & Quản trị - tách riêng từng trang theo SRS Mục 14.10 */}

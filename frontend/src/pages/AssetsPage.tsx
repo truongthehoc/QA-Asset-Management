@@ -490,7 +490,7 @@ export const AssetsPage: React.FC = () => {
     <div className="flex flex-col gap-3.5 lg:h-[calc(100vh-3.5rem-3rem)] lg:min-h-[520px] lg:overflow-hidden">
       <PageHeader
         className="mb-0 shrink-0"
-        title="Quản lý tài sản CNTT"
+        title="Quản lý tài sản"
         subtitle="Danh mục tài sản chính thức, thông tin mua sắm, bảo hành, hồ sơ đính kèm và trạng thái liên kết Windows Agent."
         actions={
           <>

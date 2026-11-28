@@ -35,7 +35,7 @@ export const AssetQrPublicPage: React.FC = () => {
   const statusLabel = asset?.statusCatalog?.name || asset?.status || '—';
   const statusBg = asset?.statusCatalog?.bgColor || '#ECFDF5';
   const statusText = asset?.statusCatalog?.textColor || '#047857';
-  const qrTitle = asset?.qrConfig?.labelTitle?.trim() || 'THẺ THÔNG TIN TÀI SẢN CNTT';
+  const qrTitle = asset?.qrConfig?.labelTitle?.trim() || 'THẺ THÔNG TIN TÀI SẢN';
   const fieldSet = new Set<string>(
     asset?.qrConfig?.fields && asset.qrConfig.fields.length > 0
       ? asset.qrConfig.fields

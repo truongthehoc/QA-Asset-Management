@@ -229,7 +229,7 @@ export const AssetCreatePage: React.FC = () => {
         </Link>
         <PageHeader
           className="mb-0"
-          title="Ghi nhận tài sản CNTT mới"
+          title="Ghi nhận tài sản mới"
           subtitle="Nhập thông tin tài sản thủ công, thông tin mua sắm/bảo hành và đính kèm chứng từ PR, PO, biên bản bàn giao."
           actions={
             <>

@@ -94,6 +94,24 @@ export class CatalogsService {
         description: 'Logo đơn vị (tải ảnh PNG/JPG/SVG hoặc nhập đường dẫn ảnh)',
       },
       {
+        key: 'app.name',
+        value: 'Quản lý tài sản',
+        group: 'APP_INFO',
+        description: 'Tên phần mềm hiển thị trên thanh điều hướng (Sidebar)',
+      },
+      {
+        key: 'app.version',
+        value: '',
+        group: 'APP_INFO',
+        description: 'Phiên bản phần mềm (để trống để tự động tăng mỗi lần deploy)',
+      },
+      {
+        key: 'app.developed_by',
+        value: 'Phòng Công nghệ Thông tin',
+        group: 'APP_INFO',
+        description: 'Tên đơn vị / nhóm phát triển hiển thị ở Footer và Form đăng nhập',
+      },
+      {
         key: 'doc.department_subtitle',
         value: 'Phòng Công nghệ Thông tin',
         group: 'DOCUMENT_TEMPLATE',
@@ -985,14 +1003,18 @@ export class CatalogsService {
   }
 
   async getPublicBranding() {
+    await this.ensureDefaultSystemSettings();
     const rows = await this.prisma.systemSetting.findMany({
-      where: { key: { in: ['org.name', 'org.logo_url'] } },
+      where: { key: { in: ['org.name', 'org.logo_url', 'app.name', 'app.version', 'app.developed_by'] } },
     });
     const map: Record<string, string> = {};
     for (const r of rows) map[r.key] = r.value;
     return {
       name: map['org.name'] || '',
       logoUrl: map['org.logo_url'] || '',
+      appName: map['app.name'] || 'Quản lý tài sản',
+      version: map['app.version'] || '',
+      developedBy: map['app.developed_by'] || 'Phòng Công nghệ Thông tin',
     };
   }
 

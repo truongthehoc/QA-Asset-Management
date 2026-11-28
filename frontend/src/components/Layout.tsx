@@ -35,17 +35,33 @@ import {
   Sliders,
   Cpu,
   FileClock,
+  Info,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useBranding } from '../contexts/BrandingContext';
 import { api } from '../api/client';
 import { Modal, Badge } from './UiPrimitives';
+import { formatRelativeTime } from '../utils/format';
 
 function getInitials(name?: string | null): string {
   if (!name) return 'IT';
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatLiveClock(d: Date): { time: string; date: string } {
+  const days = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return {
+    time: `${hh}:${mm}:${ss}`,
+    date: `${days[d.getDay()]}, ${dd}/${mo}/${yyyy}`,
+  };
 }
 
 export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -60,6 +76,12 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
   });
   const [openAdminGroup, setOpenAdminGroup] = useState<string | null>(null);
   const [quickSearch, setQuickSearch] = useState('');
+  const [nowClock, setNowClock] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowClock(new Date()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
   const [badges, setBadges] = useState({ pendingApproval: 0, unresolvedAlerts: 0 });
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; desc: string; to: string; kind: 'discovery' | 'alert' }>>([]);
   const prevSnapshotRef = useRef<{
@@ -76,11 +98,58 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     agentsOnline: 0,
   });
 
-  // Account Dropdown & Modals
+  // Account & Notification Dropdowns
   const [menuOpen, setMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const readStorageKey = `itam_read_notifs_${user?.id || 'guest'}`;
+  const [readNotifIds, setReadNotifIds] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem(`itam_read_notifs_${user?.id || 'guest'}`);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(readStorageKey);
+      setReadNotifIds(raw ? JSON.parse(raw) : []);
+    } catch {
+      setReadNotifIds([]);
+    }
+  }, [readStorageKey]);
+
+  const markNotifRead = (id: string) => {
+    setReadNotifIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev.slice(-199), id];
+      try {
+        localStorage.setItem(readStorageKey, JSON.stringify(next));
+      } catch {
+        // ignore storage quota errors
+      }
+      return next;
+    });
+  };
+
+  const markAllNotifsRead = (ids: string[]) => {
+    setReadNotifIds((prev) => {
+      const set = new Set([...prev, ...ids]);
+      const next = Array.from(set).slice(-200);
+      try {
+        localStorage.setItem(readStorageKey, JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // Change Password Form State
   const [pwdForm, setPwdForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -113,6 +182,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           pendingApproval: nextPending,
           unresolvedAlerts: nextAlerts,
         });
+        setNotifications(Array.isArray(res.data?.alertCenter) ? res.data.alertCenter : []);
 
         const prev = prevSnapshotRef.current;
         if (prev.initialized) {
@@ -188,9 +258,15 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
       }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
     };
     const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMenuOpen(false);
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        setNotifOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEsc);
@@ -332,7 +408,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
 
       {/* Collapsible Fixed Blue Sidebar (#006E96, white regular text) */}
       <aside
-        className={`no-print fixed inset-y-0 left-0 z-40 h-screen bg-rail text-white flex flex-col border-r border-white/15 transition-all duration-200 shrink-0 lg:sticky lg:top-0 ${
+        className={`no-print fixed inset-y-0 left-0 z-40 h-screen bg-rail text-white flex flex-col border-r border-white/15 transition-all duration-200 shrink-0 ${
           collapsed ? 'lg:w-[68px]' : 'lg:w-64'
         } w-64 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
@@ -357,9 +433,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             {!collapsed && (
               <div className="min-w-0">
                 <div className="text-sm font-normal text-white leading-tight truncate">
-                  {branding.name || 'IT Asset Mgmt'}
+                  {branding.appName || 'Quản lý tài sản'}
                 </div>
-                <div className="text-[11px] font-normal text-white/75 truncate">Quản lý tài sản CNTT</div>
+                {branding.name && (
+                  <div className="text-[11px] font-normal text-white/75 truncate">{branding.name}</div>
+                )}
               </div>
             )}
           </div>
@@ -541,6 +619,36 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               })}
             </div>
           )}
+
+          {/* Thông tin phần mềm — cuối Sidebar, ngay dưới Cấu hình & Hệ thống */}
+          <div className="pt-2 mt-2 border-t border-white/15">
+            <NavLink
+              to="/about"
+              title={collapsed ? 'Thông tin phần mềm' : undefined}
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `relative flex items-center rounded-md text-sm font-normal text-white transition-colors ${
+                  collapsed ? 'justify-center px-2 py-2.5' : 'justify-between px-3 py-2'
+                } ${
+                  isActive
+                    ? 'bg-white/20 text-white'
+                    : 'text-white/90 hover:bg-white/10 hover:text-white'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r bg-white" />
+                  )}
+                  <span className={`flex items-center min-w-0 ${collapsed ? '' : 'gap-2.5'}`}>
+                    <Info className="w-[18px] h-[18px] shrink-0 text-white" />
+                    {!collapsed && <span className="truncate font-normal">Thông tin phần mềm</span>}
+                  </span>
+                </>
+              )}
+            </NavLink>
+          </div>
         </nav>
 
         {/* Bottom Collapse / Expand Toggle Button */}
@@ -566,9 +674,14 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div
+        className={`flex-1 flex flex-col min-w-0 transition-all duration-200 ${
+          collapsed ? 'lg:pl-[68px]' : 'lg:pl-64'
+        }`}
+      >
         <header className="no-print h-14 bg-white border-b border-line px-3 sm:px-4 lg:px-6 flex items-center justify-between gap-2 sm:gap-4 sticky top-0 z-30">
-          <div className="flex items-center gap-2 sm:gap-2.5 flex-1 min-w-0 max-w-md">
+          {/* Left: Sidebar toggle */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => setMobileOpen(true)}
               className="lg:hidden p-2 -ml-1 text-ink-secondary hover:bg-slate-100 rounded-md shrink-0"
@@ -585,37 +698,201 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
             >
               {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
-            <form onSubmit={handleQuickSearch} className="relative flex-1 min-w-0">
-              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2" />
+          </div>
+
+          {/* Center: Quick Search */}
+          <div className="flex-1 flex justify-center min-w-0 px-0.5 sm:px-3">
+            <form onSubmit={handleQuickSearch} className="relative w-full max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-2.5 sm:left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input
                 type="text"
                 value={quickSearch}
                 onChange={(e) => setQuickSearch(e.target.value)}
-                placeholder="Tìm mã TS, serial, hostname..."
+                placeholder="Tìm mã TS, serial..."
                 className="w-full pl-8 sm:pl-9 pr-2.5 sm:pr-3 py-1.5 text-xs sm:text-sm bg-slate-50 border border-line rounded-md focus:outline-none focus:bg-white focus:border-brand"
               />
             </form>
           </div>
 
-          {/* Right Header: LAN status + Account Avatar Dropdown */}
-          <div className="flex items-center gap-3">
-            <span className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Mạng nội bộ (LAN)
-            </span>
+          {/* Right Header: Notification Bell + Borderless Account Dropdown */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Notification Bell Dropdown */}
+            <div className="relative" ref={notifRef}>
+              {(() => {
+                const discoveryNotifId = badges.pendingApproval > 0 ? `discovery-pending-${badges.pendingApproval}` : null;
+                const allNotifIds = [
+                  ...(discoveryNotifId ? [discoveryNotifId] : []),
+                  ...notifications.map((n: any) => String(n.id)),
+                ];
+                const unreadCount = allNotifIds.filter((id) => !readNotifIds.includes(id)).length;
+                const isDiscoveryUnread = discoveryNotifId ? !readNotifIds.includes(discoveryNotifId) : false;
 
-            {/* Account Avatar Dropdown */}
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNotifOpen((o) => !o);
+                        setMenuOpen(false);
+                      }}
+                      className="relative p-2 rounded-lg text-ink-secondary hover:text-ink-primary hover:bg-slate-100/80 transition-colors"
+                      title="Thông báo"
+                      aria-label="Thông báo"
+                      aria-expanded={notifOpen}
+                    >
+                      <Bell className="w-[18px] h-[18px]" />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold leading-none flex items-center justify-center tabular-nums">
+                          {unreadCount > 99 ? '99+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {notifOpen && (
+                      <div className="fixed sm:absolute left-2 right-2 sm:left-auto sm:right-0 top-14 sm:top-auto sm:mt-2 sm:w-96 bg-white border border-line rounded-xl shadow-xl z-50 overflow-hidden">
+                        <div className="px-4 py-3 border-b border-line flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-ink-primary">Thông báo</span>
+                            {unreadCount > 0 && (
+                              <span className="px-1.5 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200 text-[10px] font-semibold tabular-nums">
+                                {unreadCount} chưa đọc
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            {unreadCount > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => markAllNotifsRead(allNotifIds)}
+                                className="text-[11px] font-medium text-ink-secondary hover:text-brand"
+                              >
+                                Đã đọc tất cả
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNotifOpen(false);
+                                navigate('/alerts?tab=alerts');
+                              }}
+                              className="text-xs font-medium text-brand hover:underline"
+                            >
+                              Xem tất cả
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="max-h-96 overflow-y-auto divide-y divide-slate-100">
+                          {discoveryNotifId && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                markNotifRead(discoveryNotifId);
+                                setNotifOpen(false);
+                                navigate('/discovery');
+                              }}
+                              className={`w-full text-left px-4 py-3 hover:bg-slate-50 flex items-start gap-3 transition-colors ${
+                                isDiscoveryUnread ? 'bg-sky-50/50' : 'bg-white opacity-80'
+                              }`}
+                            >
+                              <div className="w-8 h-8 rounded-full bg-sky-100 text-brand flex items-center justify-center shrink-0 mt-0.5">
+                                <Radar className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-xs font-semibold text-ink-primary">
+                                    Có {badges.pendingApproval} thiết bị mới chờ kiểm duyệt
+                                  </div>
+                                  {isDiscoveryUnread && <span className="w-2 h-2 rounded-full bg-brand shrink-0" />}
+                                </div>
+                                <div className="text-[11px] text-ink-muted mt-0.5">
+                                  Phát hiện từ Windows Agent / mạng nội bộ
+                                </div>
+                              </div>
+                            </button>
+                          )}
+
+                          {notifications.length === 0 && !discoveryNotifId ? (
+                            <div className="py-8 px-4 text-center text-xs text-ink-muted">
+                              Không có thông báo mới. Hệ thống đang hoạt động bình thường.
+                            </div>
+                          ) : (
+                            notifications.slice(0, 10).map((n: any) => {
+                              const nid = String(n.id);
+                              const isUnread = !readNotifIds.includes(nid);
+                              const isCritical = n.severity === 'CRITICAL';
+                              const isWarn = n.severity === 'HIGH' || n.severity === 'MEDIUM';
+                              const targetLink =
+                                n.scope === 'LICENSE'
+                                  ? n.link || '/software'
+                                  : `/alerts?tab=alerts&alertId=${encodeURIComponent(nid)}`;
+
+                              return (
+                                <button
+                                  key={nid}
+                                  type="button"
+                                  onClick={() => {
+                                    markNotifRead(nid);
+                                    setNotifOpen(false);
+                                    navigate(targetLink);
+                                  }}
+                                  className={`w-full text-left px-4 py-3 hover:bg-slate-50 flex items-start gap-3 transition-colors ${
+                                    isUnread ? 'bg-sky-50/40' : 'bg-white opacity-75'
+                                  }`}
+                                >
+                                  <div
+                                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                                      isCritical
+                                        ? 'bg-rose-100 text-rose-600'
+                                        : isWarn
+                                          ? 'bg-amber-100 text-amber-600'
+                                          : 'bg-sky-100 text-sky-600'
+                                    }`}
+                                  >
+                                    <AlertCircle className="w-4 h-4" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className={`text-xs line-clamp-2 ${isUnread ? 'font-semibold text-ink-primary' : 'font-medium text-ink-secondary'}`}>
+                                        {n.title}
+                                      </div>
+                                      {isUnread && <span className="w-2 h-2 rounded-full bg-brand shrink-0 mt-1" />}
+                                    </div>
+                                    <div className="text-[11px] text-ink-muted truncate mt-0.5">{n.message}</div>
+                                    <div className="text-[10px] text-ink-muted mt-1">{formatRelativeTime(n.detectedAt)}</div>
+                                  </div>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Account Avatar Dropdown (không khung viền) */}
             <div className="relative" ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => setMenuOpen((o) => !o)}
-                className="flex items-center gap-2.5 pl-1.5 pr-2.5 py-1 rounded-full border border-line hover:bg-slate-50 transition-colors"
+                className="flex items-center gap-2 px-1.5 py-1 rounded-lg hover:bg-slate-100/80 transition-colors"
                 aria-expanded={menuOpen}
                 aria-haspopup="menu"
               >
-                <div className="w-8 h-8 rounded-full bg-rail text-white text-xs font-semibold flex items-center justify-center shrink-0">
-                  {getInitials(user?.fullName)}
-                </div>
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.fullName}
+                    className="w-8 h-8 rounded-full object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-rail text-white text-xs font-semibold flex items-center justify-center shrink-0">
+                    {getInitials(user?.fullName)}
+                  </div>
+                )}
                 <div className="hidden sm:block text-left leading-tight">
                   <div className="text-xs font-semibold text-ink-primary max-w-[130px] truncate">
                     {user?.fullName}
@@ -630,7 +907,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
               {menuOpen && (
                 <div
                   role="menu"
-                  className="absolute right-0 mt-2 w-64 bg-white border border-line rounded-lg shadow-lg py-1.5 z-50"
+                  className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-1rem)] bg-white border border-line rounded-lg shadow-xl py-1.5 z-50"
                 >
                   <div className="px-3.5 py-2.5 border-b border-line">
                     <div className="text-sm font-semibold text-ink-primary truncate">{user?.fullName}</div>
@@ -653,7 +930,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                       role="menuitem"
                       onClick={() => {
                         setMenuOpen(false);
-                        setProfileOpen(true);
+                        navigate('/profile');
                       }}
                       className="w-full px-3.5 py-2 text-left text-sm text-ink-primary hover:bg-slate-50 flex items-center gap-2.5"
                     >
@@ -697,7 +974,39 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
           </div>
         </header>
 
-        <main className="flex-1 p-3 sm:p-4 lg:p-6 w-full min-w-0 transition-all duration-200">{children}</main>
+        <main className="flex-1 p-3 sm:p-4 lg:p-6 pb-14 sm:pb-14 lg:pb-14 w-full min-w-0 transition-all duration-200">{children}</main>
+
+        {/* Fixed Footer — luôn hiển thị, không bị cuộn trang */}
+        <footer
+          className={`no-print fixed bottom-0 right-0 left-0 z-20 min-h-[36px] bg-white/95 backdrop-blur-sm border-t border-line px-3 sm:px-4 lg:px-6 py-1.5 flex items-center justify-between gap-2 text-[11px] text-ink-muted transition-all duration-200 ${
+            collapsed ? 'lg:left-[68px]' : 'lg:left-64'
+          }`}
+          style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="truncate">
+            © {new Date().getFullYear()} <span className="font-medium text-ink-secondary">{branding.name || branding.appName}</span>
+            <span className="hidden sm:inline">. All rights reserved.</span>
+          </div>
+          {(() => {
+            const clk = formatLiveClock(nowClock);
+            return (
+              <div className="flex items-center gap-2 shrink-0 truncate">
+                <span className="hidden lg:inline-flex items-center gap-1.5 text-ink-secondary select-none">
+                  <span className="font-mono font-semibold tabular-nums text-ink-primary">{clk.time}</span>
+                  <span>{clk.date}</span>
+                </span>
+                <span className="hidden lg:inline text-slate-300">|</span>
+                <span className="hidden sm:inline truncate">
+                  Phát triển bởi <span className="font-medium text-ink-secondary">{branding.developedBy}</span>
+                </span>
+                <span className="hidden sm:inline text-slate-300">|</span>
+                <span className="font-mono text-[11px] text-ink-secondary">
+                  Phiên bản <span className="font-semibold text-brand">v{branding.version}</span>
+                </span>
+              </div>
+            );
+          })()}
+        </footer>
       </div>
 
       {/* Floating Live Notifications Toast */}

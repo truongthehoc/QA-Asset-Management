@@ -9,7 +9,7 @@ export interface QrLabelConfig {
 }
 
 export const DEFAULT_QR_CONFIG: QrLabelConfig = {
-  labelTitle: 'TÀI SẢN CNTT',
+  labelTitle: 'TÀI SẢN',
   sizePx: 180,
   fields: ['assetCode', 'name', 'serialNumber', 'department', 'employee'],
 };

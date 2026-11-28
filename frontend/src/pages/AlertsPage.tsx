@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle, XCircle, RefreshCw, Sliders } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,7 +8,15 @@ import { formatDateTime } from '../utils/format';
 
 export const AlertsPage: React.FC = () => {
   const { can } = useAuth();
-  const [tab, setTab] = useState<'changes' | 'alerts' | 'rules'>('changes');
+  const [searchParams] = useSearchParams();
+  const focusedAlertId = searchParams.get('alertId') || '';
+  const initialTab =
+    searchParams.get('tab') === 'alerts' || focusedAlertId
+      ? 'alerts'
+      : searchParams.get('tab') === 'rules'
+        ? 'rules'
+        : 'changes';
+  const [tab, setTab] = useState<'changes' | 'alerts' | 'rules'>(initialTab);
   const [alerts, setAlerts] = useState<any[]>([]);
   const [changes, setChanges] = useState<any[]>([]);
   const [rules, setRules] = useState<any[]>([]);
@@ -33,6 +41,24 @@ export const AlertsPage: React.FC = () => {
     window.addEventListener('itam:realtime-update', onRealtime);
     return () => window.removeEventListener('itam:realtime-update', onRealtime);
   }, [catFilter, sevFilter]);
+
+  useEffect(() => {
+    const qTab = searchParams.get('tab');
+    const qAlertId = searchParams.get('alertId');
+    if (qAlertId || qTab === 'alerts') {
+      setTab('alerts');
+    } else if (qTab === 'rules') {
+      setTab('rules');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!focusedAlertId || tab !== 'alerts' || alerts.length === 0) return;
+    const el = document.getElementById(`alert-row-${focusedAlertId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [focusedAlertId, tab, alerts]);
 
   useEffect(() => {
     if (!notice) return;
@@ -220,7 +246,15 @@ export const AlertsPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {alerts.map((al, idx) => (
-                    <tr key={al.id} className="hover:bg-slate-50/70">
+                    <tr
+                      key={al.id}
+                      id={`alert-row-${al.id}`}
+                      className={
+                        focusedAlertId === al.id
+                          ? 'bg-sky-50/90 ring-2 ring-inset ring-brand/40 transition-colors'
+                          : 'hover:bg-slate-50/70'
+                      }
+                    >
                       <td className="td-cell text-center font-mono text-xs text-ink-muted tabular-nums">{idx + 1}</td>
                       <td className="td-cell"><SeverityBadge severity={al.severity} /></td>
                       <td className="td-cell max-w-md">

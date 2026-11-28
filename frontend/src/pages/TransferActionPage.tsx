@@ -888,13 +888,13 @@ export const TransferActionPage: React.FC = () => {
               <div className="flex justify-between gap-2">
                 <span className="text-ink-muted">Từ đơn vị:</span>
                 <span className="text-right text-ink-secondary">
-                  {selectedAsset?.usingDepartment?.name || 'Kho thiết bị CNTT'}
+                  {selectedAsset?.usingDepartment?.name || 'Kho thiết bị'}
                 </span>
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-ink-muted">Đến đơn vị:</span>
                 <span className="font-semibold text-right text-ink-primary">
-                  {mode === 'RETURN' ? 'Kho thiết bị CNTT' : selectedDept?.name || 'Chưa chọn'}
+                  {mode === 'RETURN' ? 'Kho thiết bị' : selectedDept?.name || 'Chưa chọn'}
                 </span>
               </div>
               {mode !== 'RETURN' && (
