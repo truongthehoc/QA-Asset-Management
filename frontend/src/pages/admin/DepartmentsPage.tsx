@@ -120,7 +120,46 @@ export const DepartmentsPage: React.FC = () => {
       </div>
 
       <div className="panel overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-line">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-xs text-ink-muted">Chưa có dữ liệu phòng ban.</div>
+          ) : (
+            filtered.map((d) => (
+              <div key={d.id} className="p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-bold text-brand">{d.code}</span>
+                  <span className="text-[11px] font-mono text-ink-muted">
+                    {d._count?.employees ?? 0} NV · {d._count?.usingAssets ?? 0} TS
+                  </span>
+                </div>
+                <div className="text-xs font-semibold text-ink-primary">{d.name}</div>
+                {d.location && (
+                  <div className="text-[11px] text-ink-secondary">
+                    Vị trí: {d.location.name}
+                    {[d.location.building, d.location.floor, d.location.room].filter(Boolean).length > 0
+                      ? ` (${[d.location.building, d.location.floor, d.location.room].filter(Boolean).join(' · ')})`
+                      : ''}
+                  </div>
+                )}
+                {d.description && <div className="text-[11px] text-ink-muted">{d.description}</div>}
+                {can('admin.catalogs') && (
+                  <div className="pt-1 flex justify-end gap-1.5">
+                    <button onClick={() => openEdit(d)} className="btn-secondary px-2 py-1 text-xs">
+                      <Pencil className="w-3.5 h-3.5" /> Sửa
+                    </button>
+                    <button onClick={() => handleDelete(d)} className="btn-secondary text-red-600 px-2 py-1 text-xs">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>

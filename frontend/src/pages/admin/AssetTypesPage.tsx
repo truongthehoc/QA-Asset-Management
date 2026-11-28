@@ -167,7 +167,53 @@ export const AssetTypesPage: React.FC = () => {
       </div>
 
       <div className="panel overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-line">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-xs text-ink-muted">Chưa có dữ liệu loại tài sản.</div>
+          ) : (
+            filtered.map((t) => (
+              <div key={t.id} className={`p-3.5 space-y-2 ${!t.isActive ? 'opacity-65' : ''}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-brand">{t.code}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[11px] font-semibold">
+                      #{t.sortOrder ?? 0}
+                    </span>
+                  </div>
+                  <Badge
+                    label={t.isActive ? 'Kích hoạt' : 'Ngưng'}
+                    cls={t.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}
+                  />
+                </div>
+                <div className="text-xs font-semibold text-ink-primary">{t.name}</div>
+                <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-ink-secondary">
+                  <span>Nhóm: {t.category?.name || '—'}</span>
+                  <span>•</span>
+                  <span>{t.supportsAgent ? 'Hỗ trợ Windows Agent' : 'Quản lý thủ công'}</span>
+                </div>
+                {can('admin.catalogs') && (
+                  <div className="pt-1.5 border-t border-slate-100 flex items-center justify-between">
+                    <button
+                      type="button"
+                      disabled={togglingId === t.id}
+                      onClick={() => handleToggleActive(t)}
+                      className="text-xs font-medium text-brand hover:underline"
+                    >
+                      {t.isActive ? 'Tạm ngưng' : 'Kích hoạt lại'}
+                    </button>
+                    <button onClick={() => openEdit(t)} className="btn-secondary px-2 py-1 text-xs">
+                      <Pencil className="w-3.5 h-3.5" /> Sửa
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>

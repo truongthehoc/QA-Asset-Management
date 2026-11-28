@@ -85,7 +85,28 @@ export const LocationsPage: React.FC = () => {
       </div>
 
       <div className="panel overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-line">
+          {filtered.map((l) => (
+            <div key={l.id} className="p-3.5 flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="font-mono text-xs font-bold text-brand">{l.code}</div>
+                <div className="text-xs font-semibold text-ink-primary">{l.name}</div>
+                <div className="text-[11px] text-ink-secondary">
+                  {[l.building, l.floor, l.room].filter(Boolean).join(' • ') || '—'}
+                </div>
+              </div>
+              {can('admin.catalogs') && (
+                <button onClick={() => handleDelete(l)} className="btn-secondary text-red-600 px-2 py-1 text-xs shrink-0">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>

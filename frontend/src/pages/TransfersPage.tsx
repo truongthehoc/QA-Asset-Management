@@ -124,7 +124,50 @@ export const TransfersPage: React.FC = () => {
 
       {tab === 'transfers' && (
         <div className="panel overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-line">
+            {transfers.length === 0 ? (
+              <div className="p-8 text-center text-xs text-ink-muted">
+                Chưa có phiếu điều chuyển hoặc thu hồi nào.
+              </div>
+            ) : (
+              transfers.map((t) => (
+                <div key={t.id} className="p-3.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-ink-primary">{t.transferCode}</span>
+                    <span className="text-[11px] font-mono text-ink-muted">{formatDate(t.transferDate)}</span>
+                  </div>
+                  <div>
+                    <Link to={`/assets/${t.asset?.id}`} className="font-mono text-xs font-semibold text-brand hover:underline">
+                      {t.asset?.assetCode}
+                    </Link>
+                    <span className="text-xs text-ink-primary"> — {t.asset?.name}</span>
+                  </div>
+                  <div className="text-xs bg-slate-50 rounded-md p-2 border border-slate-100 space-y-1">
+                    <div className="text-ink-secondary">
+                      <span className="text-ink-muted">Từ:</span> {t.fromDepartment?.name || 'Kho thiết bị'} ({t.fromUserName || '—'})
+                    </div>
+                    <div className="font-medium text-ink-primary">
+                      <span className="text-ink-muted font-normal">Đến:</span> {t.toDepartment?.name || 'Kho thiết bị'} ({t.toUserName || '—'})
+                    </div>
+                  </div>
+                  {t.reason && <div className="text-xs text-ink-secondary">Lý do: {t.reason}</div>}
+                  <div className="pt-1 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => openTransferReceipt(t)}
+                      className="btn-secondary px-2.5 py-1.5 text-xs"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> In biên bản
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
@@ -187,7 +230,49 @@ export const TransfersPage: React.FC = () => {
 
       {tab === 'assignments' && (
         <div className="panel overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-line">
+            {assignments.length === 0 ? (
+              <div className="p-8 text-center text-xs text-ink-muted">
+                Chưa có phiếu bàn giao tài sản nào.
+              </div>
+            ) : (
+              assignments.map((a) => (
+                <div key={a.id} className="p-3.5 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-bold text-ink-primary">{a.assignmentCode}</span>
+                    <Badge
+                      label={a.status === 'ACTIVE' ? 'Đang nắm giữ' : 'Đã thu hồi / Chuyển'}
+                      cls={a.status === 'ACTIVE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}
+                    />
+                  </div>
+                  <div>
+                    <Link to={`/assets/${a.asset?.id}`} className="font-mono text-xs font-semibold text-brand hover:underline">
+                      {a.asset?.assetCode}
+                    </Link>
+                    <span className="text-xs text-ink-primary"> — {a.asset?.name}</span>
+                  </div>
+                  <div className="text-xs text-ink-secondary space-y-0.5">
+                    <div>Phòng ban: <strong className="text-ink-primary">{a.department?.name || '—'}</strong> · {a.assigneeName}</div>
+                    <div>Bàn giao: {a.handoverBy} → {a.receivedBy}</div>
+                  </div>
+                  <div className="pt-1 flex items-center justify-between border-t border-slate-100">
+                    <span className="text-[11px] font-mono text-ink-muted">{formatDate(a.handoverDate)}</span>
+                    <button
+                      type="button"
+                      onClick={() => openAssignmentReceipt(a)}
+                      className="btn-secondary px-2.5 py-1.5 text-xs"
+                    >
+                      <Printer className="w-3.5 h-3.5" /> In biên bản
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>

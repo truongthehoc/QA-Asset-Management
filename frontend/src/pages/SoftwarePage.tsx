@@ -352,7 +352,41 @@ export const SoftwarePage: React.FC = () => {
           </form>
 
           <div className="panel overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-line">
+              {catalogPg.paginated.map((s) => (
+                <div key={s.displayName} className={`p-3.5 space-y-2 ${s.isUnauthorized ? 'bg-red-50/40' : ''}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-ink-primary">{s.displayName}</div>
+                      <div className="text-[11px] text-ink-muted">{s.publisher}</div>
+                    </div>
+                    {s.isUnauthorized ? (
+                      <Badge label="Không được phép" cls="bg-red-50 text-red-700 border-red-200" />
+                    ) : (
+                      <Badge label="Cho phép" cls="bg-emerald-50 text-emerald-700 border-emerald-200" />
+                    )}
+                  </div>
+                  <div className="text-[11px] text-ink-secondary font-mono">
+                    Phiên bản: {s.versions.join(', ') || '—'} · <strong>{s.installCount} máy</strong>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {s.devices.map((d: any, dIdx: number) =>
+                      d.assetId ? (
+                        <Link key={dIdx} to={`/assets/${d.assetId}`} className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-slate-100 text-brand">
+                          {d.assetCode}
+                        </Link>
+                      ) : (
+                        <span key={dIdx} className="font-mono text-[11px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">{d.hostname}</span>
+                      ),
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr>
@@ -413,7 +447,45 @@ export const SoftwarePage: React.FC = () => {
       {/* TAB 3: TRẠNG THÁI WINDOWS */}
       {tab === 'windows' && (
         <div className="panel overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-line">
+            {windowsPg.paginated.map((w) => (
+              <div key={w.agentId} className="p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    {w.assetId ? (
+                      <Link to={`/assets/${w.assetId}`} className="font-mono text-xs font-bold text-brand hover:underline">
+                        {w.assetCode}
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-amber-700 font-medium">Chưa duyệt</span>
+                    )}
+                    <span className="font-mono text-xs text-ink-muted ml-1.5">({w.hostname})</span>
+                  </div>
+                  {w.activationStatus === 'ACTIVATED' ? (
+                    <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Activated
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700">
+                      <AlertTriangle className="w-3.5 h-3.5" /> {w.activationStatus}
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs font-medium text-ink-primary">{w.productName} ({w.architecture})</div>
+                <div className="text-[11px] text-ink-secondary font-mono">
+                  {w.version} / {w.buildNumber} • {w.licenseChannel} • *****-{w.partialProductKey}
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-ink-muted">
+                  <span>{w.department}</span>
+                  <span>{formatDateTime(w.checkedAt)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>

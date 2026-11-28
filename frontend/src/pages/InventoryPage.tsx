@@ -165,7 +165,50 @@ export const InventoryPage: React.FC = () => {
               </div>
 
               <div className="panel overflow-hidden">
-                <div className="overflow-x-auto">
+                {/* Mobile Card View */}
+                <div className="md:hidden divide-y divide-line">
+                  {(activeSession.items || []).map((it: any) => (
+                    <div key={it.id} className="p-3.5 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-bold text-brand">{it.asset?.assetCode}</span>
+                        <InventoryStatusBadge status={it.status} />
+                      </div>
+                      <div className="text-xs font-medium text-ink-primary">{it.asset?.name}</div>
+                      <div className="text-[11px] text-ink-muted">
+                        {it.asset?.usingDepartment?.name || 'Kho'} • {it.asset?.assignedUserName || '—'}
+                      </div>
+                      {(it.discrepancyNotes || it.actualCondition || it.checkedBy) && (
+                        <div className="text-[11px] text-ink-secondary bg-slate-50 rounded p-2">
+                          {it.discrepancyNotes || it.actualCondition || ''}
+                          {it.checkedBy && (
+                            <div className="text-ink-muted mt-0.5">
+                              Bởi {it.checkedBy}
+                              {it.checkedAt ? ` • ${formatDate(it.checkedAt)}` : ''}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {activeSession.status !== 'COMPLETED' && can('inventory.manage') && (
+                        <select
+                          value={it.status}
+                          onChange={(e) => handleItemStatusChange(it, e.target.value)}
+                          className="input-field py-1.5 text-xs w-full"
+                        >
+                          <option value="NOT_CHECKED">Chưa kiểm kê</option>
+                          <option value="CHECKED">Đã kiểm kê (Khớp)</option>
+                          <option value="MISSING">Không tìm thấy</option>
+                          <option value="WRONG_LOCATION">Sai vị trí</option>
+                          <option value="WRONG_USER">Sai người sử dụng</option>
+                          <option value="WRONG_CONFIG">Sai cấu hình</option>
+                          <option value="DAMAGED">Hư hỏng</option>
+                        </select>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Desktop Table */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr>

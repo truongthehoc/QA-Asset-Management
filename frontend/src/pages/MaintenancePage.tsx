@@ -287,7 +287,41 @@ export const MaintenancePage: React.FC = () => {
 
       {tab === 'disposals' && (
         <div className="panel overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-line">
+            {disposalsPg.totalItems === 0 ? (
+              <div className="p-8 text-center text-xs text-ink-muted">Chưa có hồ sơ thanh lý.</div>
+            ) : (
+              disposalsPg.paginated.map((d) => {
+                const mMeta = DISPOSAL_METHOD_META[d.method] || {
+                  label: d.method,
+                  cls: 'bg-slate-100 text-slate-700 border-slate-200',
+                };
+                return (
+                  <div key={d.id} className="p-3.5 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-bold text-ink-primary">{d.disposalCode}</span>
+                      <Badge label={mMeta.label} cls={mMeta.cls} />
+                    </div>
+                    <div className="text-xs">
+                      <Link to={`/assets/${d.asset?.id}`} className="font-mono font-semibold text-brand hover:underline">
+                        {d.asset?.assetCode}
+                      </Link>
+                      <span className="text-ink-primary"> — {d.asset?.name}</span>
+                    </div>
+                    <div className="text-xs text-ink-secondary">{d.reason}</div>
+                    <div className="flex items-center justify-between text-[11px] text-ink-muted pt-1 border-t border-slate-100">
+                      <span>{formatDate(d.disposalDate)} · QĐ: {d.decisionNumber || '—'}</span>
+                      <span className="font-mono font-semibold text-ink-primary">{formatVnd(d.salvageValue)}</span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>

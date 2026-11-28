@@ -142,7 +142,54 @@ export const AlertsPage: React.FC = () => {
       {/* TAB 1: CONFIG DRIFT VERIFICATION (SRS 5.4 & 5.5) */}
       {tab === 'changes' && (
         <div className="panel overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y divide-line">
+            {changes.length === 0 ? (
+              <div className="p-8 text-center text-xs text-ink-muted">Không có thay đổi cấu hình nào.</div>
+            ) : (
+              changes.map((ch) => (
+                <div key={ch.id} className={`p-3.5 space-y-2 ${ch.status === 'PENDING' ? 'bg-amber-50/30' : ''}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      {ch.asset ? (
+                        <Link to={`/assets/${ch.asset.id}`} className="font-mono text-xs font-bold text-brand hover:underline">
+                          {ch.asset.assetCode}
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-xs font-semibold">{ch.agent?.hostname}</span>
+                      )}
+                      <span className="text-xs font-semibold text-ink-primary ml-1.5">• {ch.component}</span>
+                    </div>
+                    <SeverityBadge severity={ch.severity} />
+                  </div>
+                  <div className="text-xs space-y-1">
+                    <div className="px-2 py-1 rounded bg-red-50/60 text-slate-600">Trước: {ch.previousValue}</div>
+                    <div className="px-2 py-1 rounded bg-emerald-50/70 font-medium text-ink-primary">Sau: {ch.newValue}</div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <Badge
+                      label={ch.status === 'PENDING' ? 'Chờ xác minh' : ch.status === 'APPROVED' ? 'Đã duyệt Baseline' : 'Đã từ chối'}
+                      cls={ch.status === 'PENDING' ? 'bg-amber-50 text-amber-800 border-amber-200' : ch.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}
+                    />
+                    <span className="text-[11px] font-mono text-ink-muted">{formatDateTime(ch.detectedAt)}</span>
+                  </div>
+                  {ch.status === 'PENDING' && can('alerts.verify') && (
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={() => handleVerifyChange(ch, 'APPROVED')} className="btn-primary flex-1 justify-center py-1.5 text-xs">
+                        <CheckCircle className="w-3.5 h-3.5" /> Duyệt
+                      </button>
+                      <button onClick={() => handleVerifyChange(ch, 'REJECTED')} className="btn-danger flex-1 justify-center py-1.5 text-xs">
+                        <XCircle className="w-3.5 h-3.5" /> Từ chối
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr>
@@ -231,7 +278,57 @@ export const AlertsPage: React.FC = () => {
           </div>
 
           <div className="panel overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Mobile Card View */}
+            <div className="md:hidden divide-y divide-line">
+              {alerts.length === 0 ? (
+                <div className="p-8 text-center text-xs text-ink-muted">Không có cảnh báo nào.</div>
+              ) : (
+                alerts.map((al) => (
+                  <div
+                    key={al.id}
+                    className={`p-3.5 space-y-2 ${
+                      focusedAlertId === al.id ? 'bg-sky-50/90 ring-2 ring-inset ring-brand/40' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <SeverityBadge severity={al.severity} />
+                      <AlertStatusBadge status={al.status} />
+                    </div>
+                    <div className="text-xs font-semibold text-ink-primary">{al.title}</div>
+                    <div className="text-xs text-ink-secondary">{al.message}</div>
+                    <div className="flex items-center justify-between gap-2 text-[11px] text-ink-muted">
+                      <span>
+                        {al.asset ? (
+                          <Link to={`/assets/${al.asset.id}`} className="font-mono font-semibold text-brand hover:underline">
+                            {al.asset.assetCode}
+                          </Link>
+                        ) : (
+                          al.source
+                        )}
+                      </span>
+                      <span className="font-mono">{formatDateTime(al.detectedAt)}</span>
+                    </div>
+                    <div className="pt-1">
+                      <select
+                        value={al.status}
+                        onChange={(e) => handleAlertStatus(al.id, e.target.value)}
+                        className="input-field py-1.5 text-xs w-full"
+                      >
+                        <option value="NEW">Mới</option>
+                        <option value="ACKNOWLEDGED">Đã tiếp nhận</option>
+                        <option value="IN_PROGRESS">Đang xử lý</option>
+                        <option value="CONFIRMED">Đã xác nhận</option>
+                        <option value="CLOSED">Đã đóng</option>
+                        <option value="IGNORED">Bỏ qua</option>
+                      </select>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr>

@@ -67,7 +67,34 @@ export const AuditLogsPage: React.FC = () => {
           <Shield className="w-4 h-4 text-brand shrink-0" />
           Nhật ký kiểm toán bất biến theo SRS Mục 9.2 — không cho phép chỉnh sửa hay xóa bản ghi.
         </div>
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-line">
+          {logs.length === 0 ? (
+            <div className="p-8 text-center text-xs text-ink-muted">Không có bản ghi nhật ký phù hợp.</div>
+          ) : (
+            logs.map((l) => (
+              <div key={l.id} className="p-3.5 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-brand">{formatAuditAction(l.action)}</span>
+                  <span className="text-[11px] font-mono text-ink-muted">{formatDateTime(l.createdAt)}</span>
+                </div>
+                <div className="text-xs text-ink-primary">
+                  <span className="font-medium">{l.actorName}</span>
+                  <span className="text-ink-muted"> · {l.entityType}</span>
+                </div>
+                {(l.oldValue || l.newValue) && (
+                  <div className="text-[11px] text-ink-secondary bg-slate-50 rounded p-2 break-words">
+                    {l.oldValue ? `${l.oldValue} → ` : ''}{l.newValue || ''}
+                  </div>
+                )}
+                {l.reason && <div className="text-[11px] text-ink-muted">Lý do: {l.reason}</div>}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>

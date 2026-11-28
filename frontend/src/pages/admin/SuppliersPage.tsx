@@ -69,7 +69,27 @@ export const SuppliersPage: React.FC = () => {
       </div>
 
       <div className="panel overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-line">
+          {filtered.map((s) => (
+            <div key={s.id} className="p-3.5 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs font-bold text-brand">{s.code}</span>
+                {s.taxCode && <span className="font-mono text-[11px] text-ink-muted">MST: {s.taxCode}</span>}
+              </div>
+              <div className="text-xs font-semibold text-ink-primary">{s.name}</div>
+              {(s.contactName || s.phone || s.email) && (
+                <div className="text-[11px] text-ink-secondary">
+                  {[s.contactName, s.phone, s.email].filter(Boolean).join(' • ')}
+                </div>
+              )}
+              {s.address && <div className="text-[11px] text-ink-muted">{s.address}</div>}
+            </div>
+          ))}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>

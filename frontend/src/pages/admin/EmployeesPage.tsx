@@ -208,7 +208,52 @@ export const EmployeesPage: React.FC = () => {
       </div>
 
       <div className="panel overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-line">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-xs text-ink-muted">Chưa có dữ liệu nhân viên.</div>
+          ) : (
+            filtered.map((emp) => (
+              <div key={emp.id} className="p-3.5 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-bold text-brand">{emp.code}</span>
+                  <Badge
+                    label={emp.isActive ? 'Đang làm việc' : 'Ngưng'}
+                    cls={emp.isActive ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}
+                  />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-ink-primary">{emp.fullName}</div>
+                  <div className="text-[11px] text-ink-muted">
+                    {emp.department?.name || 'Chưa gán phòng ban'}
+                    {emp.title ? ` · ${emp.title}` : ''}
+                  </div>
+                </div>
+                {(emp.email || emp.phone) && (
+                  <div className="text-[11px] text-ink-secondary">
+                    {emp.email || ''}{emp.email && emp.phone ? ' · ' : ''}{emp.phone || ''}
+                  </div>
+                )}
+                <div className="flex items-center justify-between pt-1.5 border-t border-slate-100">
+                  <span className="text-[11px] text-ink-muted font-mono">Tài sản: {emp._count?.assets ?? 0}</span>
+                  {can('admin.catalogs') && (
+                    <div className="inline-flex items-center gap-1.5">
+                      <button onClick={() => openEdit(emp)} className="btn-secondary px-2 py-1 text-xs">
+                        <Pencil className="w-3.5 h-3.5" /> Sửa
+                      </button>
+                      <button onClick={() => handleDelete(emp)} className="btn-secondary text-red-600 px-2 py-1 text-xs">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Desktop Table */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr>
