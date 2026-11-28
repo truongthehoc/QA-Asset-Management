@@ -344,9 +344,11 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
         >
           <div className="flex items-center gap-2.5 min-w-0">
             {branding.logoUrl ? (
-              <div className="w-8 h-8 rounded-md bg-white p-0.5 flex items-center justify-center shrink-0 overflow-hidden shadow-xs">
-                <img src={branding.logoUrl} alt="Logo" className="max-h-full max-w-full object-contain" />
-              </div>
+              <img
+                src={branding.logoUrl}
+                alt="Logo"
+                className="h-8 w-auto max-w-[40px] object-contain shrink-0"
+              />
             ) : (
               <div className="w-8 h-8 rounded-md bg-white/15 border border-white/20 flex items-center justify-center text-white shrink-0">
                 <ShieldCheck className="w-4 h-4" />
