@@ -80,6 +80,15 @@ export class AgentProtocolController {
   version() {
     return this.agentsService.getLatestVersion();
   }
+
+  @Get('self-update/bundle')
+  async selfUpdateBundle(
+    @Headers('x-agent-id') agentUid: string,
+    @Headers('x-agent-token') agentToken: string,
+  ) {
+    await this.agentsService.authenticateAgent(agentUid, agentToken);
+    return this.agentsService.getSelfUpdateBundle();
+  }
 }
 
 @ApiTags('Agents Admin')

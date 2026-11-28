@@ -531,6 +531,103 @@ function Send-Snapshot {
     return $res
 }
 
+function Get-BytesSha256 {
+    param([byte[]]$Bytes)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hash = $sha.ComputeHash($Bytes)
+        return ([System.BitConverter]::ToString($hash) -replace '-', '').ToLower()
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-LocalFileSha256 {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path)) { return "" }
+    try {
+        return (Get-BytesSha256 -Bytes ([IO.File]::ReadAllBytes($Path)))
+    } catch {
+        return ""
+    }
+}
+
+$ScriptSelfPath = $MyInvocation.MyCommand.Path
+$LocalScriptSha256 = Get-LocalFileSha256 -Path $ScriptSelfPath
+
+function Invoke-AgentSelfUpdate {
+    param($Config, $State, $UpdateInfo)
+    if (-not $ScriptSelfPath -or -not (Test-Path -LiteralPath $ScriptSelfPath)) { return $false }
+    $baseUrl = $Config.BackendBaseUrl.TrimEnd('/')
+    $bundlePath = if ($UpdateInfo.bundleUrl) { $UpdateInfo.bundleUrl } else { "/api/v1/agent/self-update/bundle" }
+    $headers = @{
+        "X-Agent-Id"    = $State.agentUid
+        "X-Agent-Token" = $State.agentToken
+    }
+
+    Write-AgentLog "Phat hien ban cap nhat Agent moi (v$($UpdateInfo.version)) -> bat dau tu dong cap nhat OTA..."
+    $bundle = Invoke-ItamApi -Method "GET" -Url "$baseUrl$bundlePath" -Headers $headers
+    if (-not $bundle -or -not $bundle.agentPs1Base64 -or -not $bundle.agentSha256) {
+        Write-AgentLog "Goi cap nhat OTA khong hop le, bo qua." "WARN"
+        return $false
+    }
+
+    $newAgentBytes = [Convert]::FromBase64String($bundle.agentPs1Base64)
+    $actualSha = Get-BytesSha256 -Bytes $newAgentBytes
+    if ($actualSha -ne ($bundle.agentSha256.ToLower())) {
+        Write-AgentLog "Loi kiem tra SHA-256 goi cap nhat OTA! Huy bo de dam bao an toan." "ERROR"
+        return $false
+    }
+
+    # Verify PowerShell syntax before overwriting
+    $newText = [System.Text.Encoding]::UTF8.GetString($newAgentBytes)
+    $parseErrs = $null
+    [System.Management.Automation.Language.Parser]::ParseInput($newText, [ref]$null, [ref]$parseErrs) | Out-Null
+    if ($parseErrs -and $parseErrs.Count -gt 0) {
+        Write-AgentLog "File Agent moi co loi cu phap PowerShell, huy cap nhat OTA." "ERROR"
+        return $false
+    }
+
+    # Overwrite ITAssetAgent.ps1 safely with retry
+    for ($i = 1; $i -le 5; $i++) {
+        try {
+            Set-ItemProperty -LiteralPath $ScriptSelfPath -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+            [IO.File]::WriteAllBytes($ScriptSelfPath, $newAgentBytes)
+            break
+        } catch {
+            if ($i -eq 5) { throw $_ }
+            Start-Sleep -Milliseconds 400
+        }
+    }
+
+    # Optionally update ITAssetAgentTray.ps1 if provided and valid
+    if ($bundle.trayPs1Base64 -and $bundle.traySha256) {
+        try {
+            $trayBytes = [Convert]::FromBase64String($bundle.trayPs1Base64)
+            if ((Get-BytesSha256 -Bytes $trayBytes) -eq ($bundle.traySha256.ToLower())) {
+                $trayPath = Join-Path (Split-Path -Parent $ScriptSelfPath) "ITAssetAgentTray.ps1"
+                Set-ItemProperty -LiteralPath $trayPath -Name IsReadOnly -Value $false -ErrorAction SilentlyContinue
+                [IO.File]::WriteAllBytes($trayPath, $trayBytes)
+            }
+        } catch {}
+    }
+
+    # Update AgentVersion in config.json
+    if ($bundle.version -and (Test-Path -LiteralPath $ConfigPath)) {
+        try {
+            $cfgObj = Get-Content -LiteralPath $ConfigPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            $cfgObj.AgentVersion = $bundle.version
+            $cfgObj | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+        } catch {}
+    }
+
+    Write-AgentLog "Cap nhat OTA thanh cong len v$($bundle.version)! Dang khoi dong lai Agent..."
+    # Spawn detached helper to restart Scheduled Task after this process exits
+    $restartCmd = "Start-Sleep -Seconds 2; try { Start-ScheduledTask -TaskName 'ITAssetManagementAgent' -ErrorAction SilentlyContinue } catch {}"
+    Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command `"$restartCmd`"" -WindowStyle Hidden | Out-Null
+    return $true
+}
+
 function Send-Heartbeat {
     param($Config, $State, $Inventory)
     $baseUrl = $Config.BackendBaseUrl.TrimEnd('/')
@@ -542,7 +639,8 @@ function Send-Heartbeat {
     $usage = Get-CurrentUsage
     $body = [ordered]@{
         ipAddress      = if ($nic) { $nic.ipAddress } else { $null }
-        agentVersion   = if ($Config.AgentVersion) { $Config.AgentVersion } else { "1.3.0" }
+        agentVersion   = if ($Config.AgentVersion) { $Config.AgentVersion } else { "1.5.0-ps" }
+        scriptSha256   = $LocalScriptSha256
         cpuLoadPercent = $usage.cpu
         ramUsedPercent = $usage.ram
     }
@@ -624,9 +722,21 @@ try {
             }
 
             $hb = Send-Heartbeat -Config $cfg -State $state -Inventory $inv
+
+            # OTA Auto-Update: if server has a newer ITAssetAgent.ps1, self-update and restart cleanly
+            if ($hb -and $hb.update -and $hb.update.available -eq $true) {
+                try {
+                    $updated = Invoke-AgentSelfUpdate -Config $cfg -State $state -UpdateInfo $hb.update
+                    if ($updated) { exit 0 }
+                } catch {
+                    Write-AgentLog "Cap nhat OTA that bai (se thu lai o chu ky sau): $($_.Exception.Message)" "WARN"
+                }
+            }
+
             if ($hb -and $hb.commands) {
                 foreach ($cmd in @($hb.commands)) {
-                    if ($cmd.commandType -eq "SYNC_INVENTORY") {
+                    $cType = if ($cmd.type) { $cmd.type } else { $cmd.commandType }
+                    if ($cType -eq "SYNC_INVENTORY") {
                         Write-AgentLog "Nhan lenh SYNC_INVENTORY tu may chu..."
                         $freshInv = Collect-HardwareInventory
                         Send-Snapshot -Config $cfg -State $state -Inventory $freshInv -Source "ON_DEMAND" | Out-Null

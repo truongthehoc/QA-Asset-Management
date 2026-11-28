@@ -277,6 +277,7 @@ export class AgentsService {
     payload: {
       ipAddress?: string;
       agentVersion?: string;
+      scriptSha256?: string;
       cpuLoadPercent?: number;
       ramUsedPercent?: number;
       uptimeSeconds?: number;
@@ -316,10 +317,28 @@ export class AgentsService {
       });
     }
 
+    // OTA Auto-Update check (compare live ITAssetAgent.ps1 SHA-256 on server vs running client)
+    let updateInfo: any = { available: false };
+    try {
+      const meta = this.getLivePsAgentMeta();
+      const clientHash = (payload.scriptSha256 || '').trim().toLowerCase();
+      const available = Boolean(clientHash) && clientHash !== meta.agentSha256;
+      updateInfo = {
+        available,
+        version: meta.version,
+        scriptSha256: meta.agentSha256,
+        traySha256: meta.traySha256,
+        bundleUrl: '/api/v1/agent/self-update/bundle',
+      };
+    } catch {
+      // ignore if agent source folder not present
+    }
+
     return {
       status: 'OK',
       serverTime: new Date().toISOString(),
       commands: commands.map((c) => ({ id: c.id, type: c.commandType })),
+      update: updateInfo,
     };
   }
 
@@ -978,6 +997,33 @@ export class AgentsService {
     throw new NotFoundException('Không tìm thấy thư mục mã nguồn agent/windows-agent trên máy chủ.');
   }
 
+  private readonly currentPsAgentVersion = '1.5.0-ps';
+
+  private getLivePsAgentMeta() {
+    const agentDir = this.resolveWindowsAgentDir();
+    const agentBuf = fs.readFileSync(path.join(agentDir, 'ITAssetAgent.ps1'));
+    const trayPath = path.join(agentDir, 'ITAssetAgentTray.ps1');
+    const trayBuf = fs.existsSync(trayPath) ? fs.readFileSync(trayPath) : null;
+    return {
+      version: this.currentPsAgentVersion,
+      agentBuf,
+      agentSha256: crypto.createHash('sha256').update(agentBuf).digest('hex').toLowerCase(),
+      trayBuf,
+      traySha256: trayBuf ? crypto.createHash('sha256').update(trayBuf).digest('hex').toLowerCase() : null,
+    };
+  }
+
+  getSelfUpdateBundle() {
+    const meta = this.getLivePsAgentMeta();
+    return {
+      version: meta.version,
+      agentPs1Base64: meta.agentBuf.toString('base64'),
+      agentSha256: meta.agentSha256,
+      trayPs1Base64: meta.trayBuf ? meta.trayBuf.toString('base64') : null,
+      traySha256: meta.traySha256,
+    };
+  }
+
   async buildOneClickInstaller(data: {
     backendUrl?: string;
     enrollmentToken?: string;
@@ -1000,7 +1046,7 @@ export class AgentsService {
     const configObj = {
       BackendBaseUrl: backendUrl,
       EnrollmentToken: enrollmentToken,
-      AgentVersion: '1.4.0-ps',
+      AgentVersion: this.currentPsAgentVersion,
       AllowSelfSignedCert: Boolean(data.allowSelfSignedCert),
       HeartbeatIntervalSec: 120,
       SnapshotIntervalSec: 1800,
