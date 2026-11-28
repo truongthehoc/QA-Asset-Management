@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ShieldCheck,
   Lock,
@@ -20,6 +20,8 @@ export const LoginPage: React.FC = () => {
   const { login } = useAuth();
   const branding = useBranding();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isTimedOut = searchParams.get('reason') === 'timeout';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -219,6 +221,13 @@ export const LoginPage: React.FC = () => {
                 Vui lòng nhập tài khoản được cấp để truy cập bảng điều khiển quản lý tài sản.
               </p>
             </div>
+
+            {isTimedOut && !error && (
+              <div className="mb-5 p-3.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>Phiên đăng nhập đã tự động kết thúc do quá thời gian không thao tác theo cấu hình bảo mật. Vui lòng đăng nhập lại.</span>
+              </div>
+            )}
 
             {error && (
               <div className="mb-5 p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm flex items-start gap-2.5">

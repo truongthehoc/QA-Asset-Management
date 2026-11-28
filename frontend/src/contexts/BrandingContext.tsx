@@ -8,6 +8,7 @@ export interface OrgBranding {
   appName: string;
   version: string;
   developedBy: string;
+  idleTimeoutMin: number;
   refresh: () => Promise<void>;
 }
 
@@ -17,6 +18,7 @@ const BrandingContext = createContext<OrgBranding>({
   appName: 'Quản lý tài sản',
   version: BUILD_VERSION,
   developedBy: 'Phòng Công nghệ Thông tin',
+  idleTimeoutMin: 30,
   refresh: async () => {},
 });
 
@@ -37,6 +39,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [appName, setAppName] = useState('Quản lý tài sản');
   const [version, setVersion] = useState(BUILD_VERSION);
   const [developedBy, setDevelopedBy] = useState('Phòng Công nghệ Thông tin');
+  const [idleTimeoutMin, setIdleTimeoutMin] = useState(30);
 
   const refresh = useCallback(async () => {
     try {
@@ -46,12 +49,15 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       const nextAppName = (res.data?.appName || '').trim() || 'Quản lý tài sản';
       const nextVersion = (res.data?.version || '').trim() || BUILD_VERSION;
       const nextDevelopedBy = (res.data?.developedBy || '').trim() || 'Phòng Công nghệ Thông tin';
+      const rawTimeout = Number(res.data?.idleTimeoutMin);
+      const nextIdleTimeout = Number.isFinite(rawTimeout) && rawTimeout >= 0 ? rawTimeout : 30;
 
       setName(nextName);
       setLogoUrl(nextLogo);
       setAppName(nextAppName);
       setVersion(nextVersion);
       setDevelopedBy(nextDevelopedBy);
+      setIdleTimeoutMin(nextIdleTimeout);
 
       if (nextLogo) applyFavicon(nextLogo);
       document.title = nextName ? `${nextName} — ${nextAppName}` : nextAppName;
@@ -68,7 +74,7 @@ export const BrandingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [refresh]);
 
   return (
-    <BrandingContext.Provider value={{ name, logoUrl, appName, version, developedBy, refresh }}>
+    <BrandingContext.Provider value={{ name, logoUrl, appName, version, developedBy, idleTimeoutMin, refresh }}>
       {children}
     </BrandingContext.Provider>
   );

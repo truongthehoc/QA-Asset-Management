@@ -112,6 +112,12 @@ export class CatalogsService {
         description: 'Tên đơn vị / nhóm phát triển hiển thị ở Footer và Form đăng nhập',
       },
       {
+        key: 'security.idle_timeout_min',
+        value: '30',
+        group: 'SECURITY',
+        description: 'Thời gian không thao tác (phút) trước khi tự động đăng xuất tài khoản (nhập 0 để tắt)',
+      },
+      {
         key: 'doc.department_subtitle',
         value: 'Phòng Công nghệ Thông tin',
         group: 'DOCUMENT_TEMPLATE',
@@ -1005,16 +1011,23 @@ export class CatalogsService {
   async getPublicBranding() {
     await this.ensureDefaultSystemSettings();
     const rows = await this.prisma.systemSetting.findMany({
-      where: { key: { in: ['org.name', 'org.logo_url', 'app.name', 'app.version', 'app.developed_by'] } },
+      where: {
+        key: {
+          in: ['org.name', 'org.logo_url', 'app.name', 'app.version', 'app.developed_by', 'security.idle_timeout_min'],
+        },
+      },
     });
     const map: Record<string, string> = {};
     for (const r of rows) map[r.key] = r.value;
+    const rawTimeout = Number(map['security.idle_timeout_min']);
+    const idleTimeoutMin = Number.isFinite(rawTimeout) && rawTimeout >= 0 ? rawTimeout : 30;
     return {
       name: map['org.name'] || '',
       logoUrl: map['org.logo_url'] || '',
       appName: map['app.name'] || 'Quản lý tài sản',
       version: map['app.version'] || '',
       developedBy: map['app.developed_by'] || 'Phòng Công nghệ Thông tin',
+      idleTimeoutMin,
     };
   }
 

@@ -100,9 +100,9 @@ const GROUP_LIST: GroupConfig[] = [
   },
   {
     id: 'SECURITY',
-    shortTitle: 'Chính sách phần mềm',
-    title: 'Chính sách kiểm soát phần mềm',
-    desc: 'Danh sách từ khóa phần mềm cần kiểm tra hoặc không được phép cài đặt.',
+    shortTitle: 'Bảo mật & Chính sách',
+    title: 'Bảo mật phiên đăng nhập & Chính sách phần mềm',
+    desc: 'Cấu hình thời gian tự động đăng xuất khi không thao tác và danh sách phần mềm không được phép cài đặt.',
     icon: ShieldAlert,
   },
 ];
@@ -247,6 +247,14 @@ const FIELD_META: Record<string, FieldMeta> = {
     label: 'Phát triển bởi',
     help: 'Hiển thị ở thanh Footer cố định cuối trang và tại Form đăng nhập.',
     kind: 'text',
+  },
+  'security.idle_timeout_min': {
+    label: 'Thời gian tự động đăng xuất khi không thao tác',
+    help: 'Hệ thống sẽ tự động đăng xuất tài khoản sau số phút không có thao tác chuột/bàn phím. Nhập 0 để tắt tính năng này.',
+    kind: 'number',
+    unit: 'phút',
+    min: 0,
+    max: 1440,
   },
   'doc.department_subtitle': {
     label: 'Tên bộ phận phụ trách trên biên bản',

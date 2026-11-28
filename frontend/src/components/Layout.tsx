@@ -83,6 +83,43 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     const id = window.setInterval(() => setNowClock(new Date()), 1000);
     return () => window.clearInterval(id);
   }, []);
+
+  // Tự động đăng xuất sau mốc thời gian không thao tác cấu hình trong Tham số hệ thống
+  useEffect(() => {
+    const timeoutMin = branding.idleTimeoutMin;
+    if (!user || !timeoutMin || timeoutMin <= 0) return;
+
+    const timeoutMs = timeoutMin * 60_000;
+    const ACTIVITY_KEY = 'itam_last_activity';
+    let lastWrite = Date.now();
+    localStorage.setItem(ACTIVITY_KEY, String(lastWrite));
+
+    const recordActivity = () => {
+      const now = Date.now();
+      if (now - lastWrite >= 5000) {
+        lastWrite = now;
+        localStorage.setItem(ACTIVITY_KEY, String(now));
+      }
+    };
+
+    const events: Array<keyof WindowEventMap> = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    events.forEach((ev) => window.addEventListener(ev, recordActivity, { passive: true }));
+
+    const checkInterval = window.setInterval(() => {
+      const stored = Number(localStorage.getItem(ACTIVITY_KEY) || lastWrite);
+      if (Date.now() - stored >= timeoutMs) {
+        window.clearInterval(checkInterval);
+        localStorage.removeItem(ACTIVITY_KEY);
+        logout();
+        navigate('/login?reason=timeout', { replace: true });
+      }
+    }, 10_000);
+
+    return () => {
+      events.forEach((ev) => window.removeEventListener(ev, recordActivity));
+      window.clearInterval(checkInterval);
+    };
+  }, [user, branding.idleTimeoutMin, logout, navigate]);
   const [badges, setBadges] = useState({ pendingApproval: 0, unresolvedAlerts: 0 });
   const [toasts, setToasts] = useState<Array<{ id: string; title: string; desc: string; to: string; kind: 'discovery' | 'alert' }>>([]);
   const prevSnapshotRef = useRef<{
