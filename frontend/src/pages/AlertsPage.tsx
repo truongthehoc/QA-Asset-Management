@@ -71,10 +71,29 @@ export const AlertsPage: React.FC = () => {
   const handleVerifyChange = async (change: any, decision: 'APPROVED' | 'REJECTED') => {
     const notes = await prompt({
       title: decision === 'APPROVED' ? 'Xác nhận thay đổi & Cập nhật Baseline' : 'Từ chối thay đổi cấu hình',
-      message:
-        decision === 'APPROVED'
-          ? `Xác nhận thay đổi ${change.component} (${change.previousValue} → ${change.newValue}) và CẬP NHẬT Baseline mới?`
-          : `Từ chối thay đổi ${change.component} (${change.previousValue} → ${change.newValue}) và giữ nguyên Baseline cũ?`,
+      message: (
+        <div className="space-y-2">
+          <div>
+            {decision === 'APPROVED'
+              ? 'Xác nhận thay đổi cấu hình dưới đây và CẬP NHẬT Baseline mới?'
+              : 'Từ chối thay đổi cấu hình dưới đây và giữ nguyên Baseline cũ?'}
+          </div>
+          <div className="p-2.5 rounded-lg bg-brand-soft/60 border border-sky-200/80 text-xs space-y-1">
+            <div>
+              <span className="text-ink-muted">Thành phần: </span>
+              <span className="font-bold text-brand">{change.component}</span>
+            </div>
+            <div>
+              <span className="text-ink-muted">Trước: </span>
+              <span className="font-medium text-brand/85 line-through">{change.previousValue}</span>
+            </div>
+            <div>
+              <span className="text-ink-muted">Sau: </span>
+              <span className="font-semibold text-brand">{change.newValue}</span>
+            </div>
+          </div>
+        </div>
+      ),
       defaultValue:
         decision === 'APPROVED'
           ? 'Đã xác minh thay đổi hợp lệ, cập nhật Baseline'

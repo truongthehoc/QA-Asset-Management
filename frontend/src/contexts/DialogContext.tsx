@@ -5,7 +5,7 @@ type DialogTone = 'primary' | 'warning' | 'danger';
 
 export interface ConfirmOptions {
   title?: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: DialogTone;
@@ -22,7 +22,7 @@ export interface PromptOptions extends ConfirmOptions {
 interface DialogState {
   kind: 'confirm' | 'prompt';
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel: string;
   cancelLabel: string;
   tone: DialogTone;
@@ -175,9 +175,9 @@ export const DialogProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               </div>
               <div className="min-w-0 flex-1">
                 <h3 className="text-sm sm:text-base font-bold text-ink-primary leading-snug">{dialog.title}</h3>
-                <p className="text-xs sm:text-sm text-ink-secondary mt-1.5 leading-relaxed whitespace-pre-wrap break-words">
+                <div className="text-xs sm:text-sm text-ink-secondary mt-1.5 leading-relaxed whitespace-pre-wrap break-words">
                   {dialog.message}
-                </p>
+                </div>
               </div>
               <button
                 type="button"
