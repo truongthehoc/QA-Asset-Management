@@ -19,6 +19,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { api, downloadAuthorizedFile } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialog } from '../contexts/DialogContext';
 import { AssetQrLabel, QrLabelConfig } from '../components/AssetQrLabel';
 import { HandoverReceipt, ReceiptData } from '../components/HandoverReceipt';
 import { CurrencyInput, DateInputVN } from '../components/FormInputs';
@@ -57,6 +58,7 @@ const TABS = [
 export const AssetDetailPage: React.FC = () => {
   const { id } = useParams();
   const { can } = useAuth();
+  const { confirm, prompt } = useDialog();
   const [asset, setAsset] = useState<any>(null);
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('overview');
   const [loading, setLoading] = useState(true);
@@ -269,18 +271,33 @@ export const AssetDetailPage: React.FC = () => {
   };
 
   const handleDeleteDoc = async (docId: string) => {
-    if (!window.confirm('Xác nhận xóa hồ sơ đính kèm này?')) return;
+    const ok = await confirm({
+      title: 'Xóa hồ sơ đính kèm',
+      message: 'Bạn có chắc chắn muốn xóa hồ sơ đính kèm này không?',
+      confirmLabel: 'Xóa hồ sơ',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await api.delete(`/assets/documents/${docId}`);
     load();
   };
 
   const handleVerifyChange = async (changeId: string, decision: 'APPROVED' | 'REJECTED') => {
-    const notes = window.prompt(
-      decision === 'APPROVED'
-        ? 'Xác nhận thay đổi và cập nhật Baseline mới? Nhập ghi chú xác minh:'
-        : 'Từ chối thay đổi (giữ nguyên Baseline cũ)? Nhập lý do:',
-      decision === 'APPROVED' ? 'Đã xác minh nâng cấp hợp lệ theo đề xuất IT' : 'Chưa được phê duyệt, yêu cầu kiểm tra thực tế',
-    );
+    const notes = await prompt({
+      title: decision === 'APPROVED' ? 'Duyệt thay đổi & Cập nhật Baseline' : 'Từ chối thay đổi cấu hình',
+      message:
+        decision === 'APPROVED'
+          ? 'Xác nhận thay đổi cấu hình này là hợp lệ và cập nhật Baseline mới?'
+          : 'Từ chối thay đổi cấu hình này và giữ nguyên Baseline hiện hành?',
+      defaultValue:
+        decision === 'APPROVED'
+          ? 'Đã xác minh nâng cấp hợp lệ theo đề xuất IT'
+          : 'Chưa được phê duyệt, yêu cầu kiểm tra thực tế',
+      inputLabel: 'Ghi chú xác minh',
+      confirmLabel: decision === 'APPROVED' ? 'Duyệt & Cập nhật' : 'Xác nhận từ chối',
+      tone: decision === 'APPROVED' ? 'primary' : 'danger',
+      multiline: true,
+    });
     if (notes === null) return;
     await api.post(`/alerts/changes/${changeId}/verify`, {
       decision,

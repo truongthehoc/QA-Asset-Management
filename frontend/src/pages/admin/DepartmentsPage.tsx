@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDialog } from '../../contexts/DialogContext';
 import { PageHeader, Modal } from '../../components/UiPrimitives';
 
 export const DepartmentsPage: React.FC = () => {
   const { can } = useAuth();
+  const { confirm } = useDialog();
   const [items, setItems] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -68,7 +70,13 @@ export const DepartmentsPage: React.FC = () => {
   };
 
   const handleDelete = async (d: any) => {
-    if (!window.confirm(`Xác nhận ẩn phòng ban "${d.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Ẩn phòng ban',
+      message: `Xác nhận ẩn phòng ban "${d.name}" khỏi danh mục sử dụng?`,
+      confirmLabel: 'Xác nhận ẩn',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await api.delete(`/admin/departments/${d.id}`);
     setNotice({ type: 'err', text: `Đã ẩn phòng ban "${d.name}".` });
     load();

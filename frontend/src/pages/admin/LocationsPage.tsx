@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Search } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDialog } from '../../contexts/DialogContext';
 import { PageHeader, Modal } from '../../components/UiPrimitives';
 
 export const LocationsPage: React.FC = () => {
   const { can } = useAuth();
+  const { confirm } = useDialog();
   const [items, setItems] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [open, setOpen] = useState(false);
@@ -38,7 +40,13 @@ export const LocationsPage: React.FC = () => {
   };
 
   const handleDelete = async (l: any) => {
-    if (!window.confirm(`Xác nhận ẩn vị trí "${l.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Ẩn vị trí',
+      message: `Xác nhận ẩn vị trí "${l.name}" khỏi danh mục?`,
+      confirmLabel: 'Xác nhận ẩn',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await api.delete(`/admin/locations/${l.id}`);
     setNotice({ type: 'err', text: `Đã ẩn vị trí "${l.name}".` });
     load();

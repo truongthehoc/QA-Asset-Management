@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search, AlertCircle } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDialog } from '../../contexts/DialogContext';
 import { PageHeader, Modal } from '../../components/UiPrimitives';
 
 export const AssetCategoriesPage: React.FC = () => {
   const { can } = useAuth();
+  const { confirm } = useDialog();
   const [items, setItems] = useState<any[]>([]);
   const [search, setSearch] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
@@ -67,7 +69,13 @@ export const AssetCategoriesPage: React.FC = () => {
   };
 
   const handleDelete = async (cat: any) => {
-    if (!window.confirm(`Xác nhận xóa nhóm tài sản "${cat.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Xóa nhóm tài sản',
+      message: `Xác nhận xóa nhóm tài sản "${cat.name}"?`,
+      confirmLabel: 'Xóa nhóm',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setFeedback(null);
     try {
       await api.delete(`/admin/asset-categories/${cat.id}`);

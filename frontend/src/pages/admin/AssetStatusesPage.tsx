@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search, AlertCircle } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDialog } from '../../contexts/DialogContext';
 import { AssetStatusItem, useAssetStatuses } from '../../contexts/AssetStatusContext';
 import { PageHeader, Modal } from '../../components/UiPrimitives';
 
@@ -17,6 +18,7 @@ const COLOR_PRESETS = [
 
 export const AssetStatusesPage: React.FC = () => {
   const { can } = useAuth();
+  const { confirm } = useDialog();
   const { statuses, refresh } = useAssetStatuses();
   const [items, setItems] = useState<AssetStatusItem[]>(statuses);
   const [search, setSearch] = useState('');
@@ -123,7 +125,13 @@ export const AssetStatusesPage: React.FC = () => {
   };
 
   const handleDelete = async (st: AssetStatusItem) => {
-    if (!window.confirm(`Xác nhận xóa trạng thái tài sản "${st.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Xóa trạng thái tài sản',
+      message: `Xác nhận xóa trạng thái tài sản "${st.name}"?`,
+      confirmLabel: 'Xóa trạng thái',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setFeedback(null);
     try {
       await api.delete(`/admin/asset-statuses/${st.id}`);

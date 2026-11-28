@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api, downloadAuthorizedFile } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialog } from '../contexts/DialogContext';
 import { Badge } from '../components/UiPrimitives';
 import { CurrencyInput, DateInputVN } from '../components/FormInputs';
 import {
@@ -30,6 +31,7 @@ export const ContractDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { can } = useAuth();
+  const { confirm } = useDialog();
   const canManage = can('assets.update');
   const canDocs = can('assets.documents');
 
@@ -130,7 +132,14 @@ export const ContractDetailPage: React.FC = () => {
   };
 
   const handleDelete = async () => {
-    if (!id || !window.confirm(`Xác nhận xóa hợp đồng "${contract?.contractCode}"?`)) return;
+    if (!id) return;
+    const ok = await confirm({
+      title: 'Xóa hợp đồng',
+      message: `Xác nhận xóa hợp đồng "${contract?.contractCode}"? Thao tác này không thể hoàn tác.`,
+      confirmLabel: 'Xóa hợp đồng',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.delete(`/contracts/${id}`);
       navigate('/contracts');
@@ -166,7 +175,14 @@ export const ContractDetailPage: React.FC = () => {
   };
 
   const handleDeleteDoc = async (docId: string) => {
-    if (!id || !window.confirm('Xóa tệp đính kèm này?')) return;
+    if (!id) return;
+    const ok = await confirm({
+      title: 'Xóa tệp đính kèm',
+      message: 'Bạn có chắc chắn muốn xóa tệp đính kèm này khỏi hợp đồng?',
+      confirmLabel: 'Xóa tệp',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.delete(`/contracts/${id}/documents/${docId}`);
       await load();

@@ -2,12 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Plus, QrCode, CheckCircle2, ClipboardList } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialog } from '../contexts/DialogContext';
 import { PageHeader, Modal, InventoryStatusBadge, Badge } from '../components/UiPrimitives';
 import { DateInputVN } from '../components/FormInputs';
 import { formatDate } from '../utils/format';
 
 export const InventoryPage: React.FC = () => {
   const { can } = useAuth();
+  const { confirm, prompt } = useDialog();
   const [sessions, setSessions] = useState<any[]>([]);
   const [activeSession, setActiveSession] = useState<any>(null);
   const [meta, setMeta] = useState<any>({ departments: [], assetTypes: [] });
@@ -63,7 +65,15 @@ export const InventoryPage: React.FC = () => {
   const handleItemStatusChange = async (item: any, status: string) => {
     let notes = item.discrepancyNotes || '';
     if (status !== 'CHECKED' && status !== 'NOT_CHECKED') {
-      const promptRes = window.prompt('Nhập ghi chú sai lệch / tình trạng thực tế:', notes);
+      const promptRes = await prompt({
+        title: 'Ghi nhận sai lệch kiểm kê',
+        message: `Nhập ghi chú sai lệch / tình trạng thực tế cho tài sản ${item.asset?.assetCode || ''}:`,
+        defaultValue: notes,
+        inputLabel: 'Ghi chú thực tế',
+        confirmLabel: 'Lưu trạng thái',
+        tone: 'warning',
+        multiline: true,
+      });
       if (promptRes === null) return;
       notes = promptRes;
     }
@@ -72,7 +82,14 @@ export const InventoryPage: React.FC = () => {
   };
 
   const handleCompleteSession = async () => {
-    if (!activeSession || !window.confirm('Chốt hoàn tất đợt kiểm kê này?')) return;
+    if (!activeSession) return;
+    const ok = await confirm({
+      title: 'Chốt hoàn tất đợt kiểm kê',
+      message: `Xác nhận chốt hoàn tất đợt kiểm kê "${activeSession.name}"? Sau khi chốt sẽ không thể chỉnh sửa kết quả.`,
+      confirmLabel: 'Chốt hoàn tất',
+      tone: 'primary',
+    });
+    if (!ok) return;
     await api.patch(`/inventory/sessions/${activeSession.id}/complete`);
     loadSessions(activeSession.id);
   };

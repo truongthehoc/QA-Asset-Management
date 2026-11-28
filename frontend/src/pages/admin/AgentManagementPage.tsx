@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { KeyRound, Copy, Plus, Package, Download, MonitorCheck, AlertCircle } from 'lucide-react';
 import { api } from '../../api/client';
+import { useDialog } from '../../contexts/DialogContext';
 import { PageHeader, Modal, Badge } from '../../components/UiPrimitives';
 import { formatDate } from '../../utils/format';
 
 export const AgentManagementPage: React.FC = () => {
+  const { confirm } = useDialog();
   const [tokens, setTokens] = useState<any[]>([]);
   const [versions, setVersions] = useState<any[]>([]);
   const [tokenForm, setTokenForm] = useState({ name: '', maxUses: '100', expiresDays: '30' });
@@ -136,7 +138,13 @@ export const AgentManagementPage: React.FC = () => {
   };
 
   const handleRevokeToken = async (id: string) => {
-    if (!window.confirm('Xác nhận thu hồi Enrollment Token này?')) return;
+    const ok = await confirm({
+      title: 'Thu hồi Enrollment Token',
+      message: 'Xác nhận thu hồi Enrollment Token này? Các Agent mới sẽ không thể dùng token này để đăng ký nữa.',
+      confirmLabel: 'Thu hồi Token',
+      tone: 'danger',
+    });
+    if (!ok) return;
     await api.patch(`/agents/tokens/${id}/revoke`);
     setMsg('');
     setErrMsg('Đã thu hồi Enrollment Token.');

@@ -3,11 +3,13 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { CheckCircle, XCircle, RefreshCw, Sliders } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialog } from '../contexts/DialogContext';
 import { PageHeader, SeverityBadge, AlertStatusBadge, Badge } from '../components/UiPrimitives';
 import { formatDateTime } from '../utils/format';
 
 export const AlertsPage: React.FC = () => {
   const { can } = useAuth();
+  const { prompt } = useDialog();
   const [searchParams] = useSearchParams();
   const focusedAlertId = searchParams.get('alertId') || '';
   const initialTab =
@@ -67,12 +69,21 @@ export const AlertsPage: React.FC = () => {
   }, [notice]);
 
   const handleVerifyChange = async (change: any, decision: 'APPROVED' | 'REJECTED') => {
-    const notes = window.prompt(
-      decision === 'APPROVED'
-        ? `Xác nhận thay đổi ${change.component} (${change.previousValue} -> ${change.newValue}) và CẬP NHẬT Baseline mới? Ghi chú:`
-        : `Từ chối thay đổi ${change.component} và giữ nguyên Baseline cũ? Ghi chú:`,
-      decision === 'APPROVED' ? 'Đã xác minh thay đổi hợp lệ, cập nhật Baseline' : 'Chưa được phê duyệt, cần kiểm tra máy trạm',
-    );
+    const notes = await prompt({
+      title: decision === 'APPROVED' ? 'Xác nhận thay đổi & Cập nhật Baseline' : 'Từ chối thay đổi cấu hình',
+      message:
+        decision === 'APPROVED'
+          ? `Xác nhận thay đổi ${change.component} (${change.previousValue} → ${change.newValue}) và CẬP NHẬT Baseline mới?`
+          : `Từ chối thay đổi ${change.component} (${change.previousValue} → ${change.newValue}) và giữ nguyên Baseline cũ?`,
+      defaultValue:
+        decision === 'APPROVED'
+          ? 'Đã xác minh thay đổi hợp lệ, cập nhật Baseline'
+          : 'Chưa được phê duyệt, cần kiểm tra máy trạm',
+      inputLabel: 'Ghi chú xác minh',
+      confirmLabel: decision === 'APPROVED' ? 'Duyệt & Cập nhật' : 'Xác nhận từ chối',
+      tone: decision === 'APPROVED' ? 'primary' : 'danger',
+      multiline: true,
+    });
     if (notes === null) return;
     await api.post(`/alerts/changes/${change.id}/verify`, {
       decision,
@@ -90,7 +101,15 @@ export const AlertsPage: React.FC = () => {
   };
 
   const handleAlertStatus = async (alertId: string, status: string) => {
-    const notes = window.prompt('Ghi chú xử lý cảnh báo (tùy chọn):', '');
+    const notes = await prompt({
+      title: 'Cập nhật trạng thái cảnh báo',
+      message: 'Nhập ghi chú xử lý cảnh báo (có thể để trống nếu không cần ghi chú thêm).',
+      defaultValue: '',
+      inputLabel: 'Ghi chú xử lý (tùy chọn)',
+      placeholder: 'Nhập ghi chú xử lý...',
+      confirmLabel: 'Cập nhật',
+      tone: 'primary',
+    });
     if (notes === null) return;
     await api.patch(`/alerts/${alertId}/status`, { status, notes });
     load();

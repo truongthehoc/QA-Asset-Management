@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api, downloadAuthorizedFile } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialog } from '../contexts/DialogContext';
 import { Badge, Modal } from '../components/UiPrimitives';
 import { CurrencyInput, DateInputVN } from '../components/FormInputs';
 import { TablePagination, usePagination } from '../components/TablePagination';
@@ -54,6 +55,7 @@ const HISTORY_ACTION_META: Record<string, { label: string; cls: string }> = {
 export const SoftwareLicenseDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { can } = useAuth();
+  const { confirm } = useDialog();
   const canManage = can('assets.update');
   const canDocs = can('assets.documents');
 
@@ -299,7 +301,14 @@ export const SoftwareLicenseDetailPage: React.FC = () => {
   };
 
   const handleDeleteDoc = async (docId: string) => {
-    if (!id || !window.confirm('Xóa chứng từ này khỏi hồ sơ bản quyền?')) return;
+    if (!id) return;
+    const ok = await confirm({
+      title: 'Xóa chứng từ bản quyền',
+      message: 'Bạn có chắc chắn muốn xóa chứng từ này khỏi hồ sơ bản quyền?',
+      confirmLabel: 'Xóa chứng từ',
+      tone: 'danger',
+    });
+    if (!ok) return;
     try {
       await api.delete(`/software/licenses/${id}/documents/${docId}`);
       await load();

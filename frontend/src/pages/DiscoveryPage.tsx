@@ -14,11 +14,13 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialog } from '../contexts/DialogContext';
 import { PageHeader, Modal, AgentStatusBadge, Badge } from '../components/UiPrimitives';
 import { formatDateTime, formatRelativeTime } from '../utils/format';
 
 export const DiscoveryPage: React.FC = () => {
   const { can } = useAuth();
+  const { prompt } = useDialog();
   const [tab, setTab] = useState<'pending' | 'all' | 'agents' | 'networks'>('pending');
   const [devices, setDevices] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
@@ -67,7 +69,14 @@ export const DiscoveryPage: React.FC = () => {
   }, [feedback]);
 
   const handleIgnore = async (dev: any) => {
-    const reason = window.prompt('Nhập lý do bỏ qua thiết bị này:', 'Thiết bị cá nhân / không thuộc diện quản lý');
+    const reason = await prompt({
+      title: 'Bỏ qua thiết bị phát hiện',
+      message: `Nhập lý do bỏ qua thiết bị "${dev.hostname || dev.ipAddress || ''}" khỏi danh sách quản lý:`,
+      defaultValue: 'Thiết bị cá nhân / không thuộc diện quản lý',
+      inputLabel: 'Lý do bỏ qua',
+      confirmLabel: 'Xác nhận bỏ qua',
+      tone: 'warning',
+    });
     if (reason === null) return;
     await api.patch(`/discovery/devices/${dev.id}/ignore`, { reason });
     loadAll();
@@ -104,7 +113,15 @@ export const DiscoveryPage: React.FC = () => {
   };
 
   const handleRevokeAgent = async (agent: any) => {
-    const reason = window.prompt(`Xác nhận thu hồi Agent ${agent.agentUid}? Nhập lý do:`, 'Máy thanh lý / cài đặt lại Agent');
+    const reason = await prompt({
+      title: 'Thu hồi Windows Agent',
+      message: `Xác nhận thu hồi chứng chỉ kết nối của Agent ${agent.agentUid}?`,
+      defaultValue: 'Máy thanh lý / cài đặt lại Agent',
+      inputLabel: 'Lý do thu hồi',
+      confirmLabel: 'Thu hồi Agent',
+      tone: 'danger',
+      required: true,
+    });
     if (!reason) return;
     await api.patch(`/agents/${agent.id}/revoke`, { reason });
     loadAll();

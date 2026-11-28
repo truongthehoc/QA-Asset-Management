@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDialog } from '../../contexts/DialogContext';
 import { PageHeader, Modal, Badge } from '../../components/UiPrimitives';
 
 interface MatrixRowSpec {
@@ -116,6 +117,7 @@ const MATRIX_ROWS: MatrixRowSpec[] = [
 
 export const RolesPage: React.FC = () => {
   const { user } = useAuth();
+  const { confirm } = useDialog();
   const isSuperAdmin = !!user?.roles?.includes('SYSTEM_ADMIN');
 
   const [roles, setRoles] = useState<any[]>([]);
@@ -179,9 +181,15 @@ export const RolesPage: React.FC = () => {
   const selectedRole = roles.find((r) => r.id === selectedRoleId) || null;
   const isCoreSuper = selectedRole?.code === 'SYSTEM_ADMIN';
 
-  const handleSelectRole = (role: any) => {
-    if (dirty && !window.confirm('Bạn có thay đổi phân quyền chưa lưu. Bỏ qua thay đổi và chuyển nhóm quyền?')) {
-      return;
+  const handleSelectRole = async (role: any) => {
+    if (dirty) {
+      const ok = await confirm({
+        title: 'Thay đổi chưa được lưu',
+        message: 'Bạn có thay đổi phân quyền chưa lưu. Bỏ qua thay đổi và chuyển sang nhóm quyền khác?',
+        confirmLabel: 'Bỏ qua & Chuyển',
+        tone: 'warning',
+      });
+      if (!ok) return;
     }
     setFeedback(null);
     setSelectedRoleId(role.id);
@@ -306,7 +314,13 @@ export const RolesPage: React.FC = () => {
 
   const handleDeleteRole = async (e: React.MouseEvent, role: any) => {
     e.stopPropagation();
-    if (!window.confirm(`Xác nhận xóa nhóm quyền "${role.name}"?`)) return;
+    const ok = await confirm({
+      title: 'Xóa nhóm quyền',
+      message: `Xác nhận xóa nhóm quyền "${role.name}"?`,
+      confirmLabel: 'Xóa nhóm quyền',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setFeedback(null);
     try {
       await api.delete(`/admin/roles/${role.id}`);

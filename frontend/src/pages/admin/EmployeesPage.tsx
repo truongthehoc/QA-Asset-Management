@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Pencil, Trash2, Search, AlertCircle } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useDialog } from '../../contexts/DialogContext';
 import { PageHeader, Modal, Badge } from '../../components/UiPrimitives';
 
 export const EmployeesPage: React.FC = () => {
   const { can } = useAuth();
+  const { confirm } = useDialog();
   const [items, setItems] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [search, setSearch] = useState('');
@@ -136,7 +138,13 @@ export const EmployeesPage: React.FC = () => {
   };
 
   const handleDelete = async (emp: any) => {
-    if (!window.confirm(`Xác nhận xóa nhân viên "${emp.fullName}" (${emp.code})?`)) return;
+    const ok = await confirm({
+      title: 'Xóa nhân viên',
+      message: `Xác nhận xóa nhân viên "${emp.fullName}" (${emp.code})?`,
+      confirmLabel: 'Xóa nhân viên',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setFeedback(null);
     try {
       await api.delete(`/admin/employees/${emp.id}`);
