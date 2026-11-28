@@ -559,40 +559,114 @@ export class AgentsService {
         ) => {
           const rule = ruleMap.get(ruleCode);
           const severity = rule?.severity || defaultSeverity;
-          const change = await this.prisma.deviceChange.create({
-            data: {
+          const now = new Date();
+
+          // Chống trùng lặp: nếu đã có bản ghi PENDING giống hệt (cùng thiết bị, thành phần, giá trị Trước -> Sau)
+          // thì chỉ cập nhật thời điểm phát hiện mới nhất và dọn các bản ghi trùng cũ hơn.
+          const existingPending = await this.prisma.deviceChange.findMany({
+            where: {
               assetId: agent.assetId,
               agentId: agent.id,
-              baselineId: activeBaseline.id,
-              snapshotId: snapshot.id,
               component,
-              changeType,
               previousValue: prev,
               newValue: next,
-              severity,
               status: 'PENDING',
-              source: 'BASELINE_DIFF',
             },
+            orderBy: { detectedAt: 'desc' },
           });
-          detectedChanges.push(change);
-          if (!rule || rule.isEnabled) {
-            await this.prisma.alertEvent.create({
+
+          let change: any;
+          if (existingPending.length > 0) {
+            const latest = existingPending[0];
+            change = await this.prisma.deviceChange.update({
+              where: { id: latest.id },
               data: {
-                ruleCode,
-                category: component === 'SOFTWARE' ? 'SOFTWARE' : 'CONFIG_CHANGE',
+                baselineId: activeBaseline.id,
+                snapshotId: snapshot.id,
+                changeType,
                 severity,
-                status: 'NEW',
-                title,
-                message: `Phát hiện thay đổi ${component} trên ${agent.hostname}: "${prev}" -> "${next}". Baseline chưa được cập nhật, cần IT xác minh.`,
+                detectedAt: now,
+              },
+            });
+            if (existingPending.length > 1) {
+              const dupIds = existingPending.slice(1).map((x) => x.id);
+              await this.prisma.deviceChange.deleteMany({ where: { id: { in: dupIds } } });
+            }
+          } else {
+            change = await this.prisma.deviceChange.create({
+              data: {
                 assetId: agent.assetId,
                 agentId: agent.id,
-                deviceChangeId: change.id,
+                baselineId: activeBaseline.id,
+                snapshotId: snapshot.id,
+                component,
+                changeType,
+                previousValue: prev,
+                newValue: next,
+                severity,
+                status: 'PENDING',
+                source: 'BASELINE_DIFF',
+                detectedAt: now,
+              },
+            });
+          }
+
+          detectedChanges.push(change);
+
+          if (!rule || rule.isEnabled) {
+            const category = component === 'SOFTWARE' ? 'SOFTWARE' : 'CONFIG_CHANGE';
+            const message = `Phát hiện thay đổi ${component} trên ${agent.hostname}: "${prev}" -> "${next}". Baseline chưa được cập nhật, cần IT xác minh.`;
+
+            const existingAlerts = await this.prisma.alertEvent.findMany({
+              where: {
+                assetId: agent.assetId,
+                agentId: agent.id,
                 component,
                 previousValue: prev,
                 newValue: next,
-                source: 'WINDOWS_AGENT',
+                status: { in: ['NEW', 'ACKNOWLEDGED', 'IN_PROGRESS'] },
               },
+              orderBy: { detectedAt: 'desc' },
             });
+
+            if (existingAlerts.length > 0) {
+              const latestAlert = existingAlerts[0];
+              await this.prisma.alertEvent.update({
+                where: { id: latestAlert.id },
+                data: {
+                  ruleCode,
+                  category,
+                  severity,
+                  title,
+                  message,
+                  deviceChangeId: change.id,
+                  detectedAt: now,
+                },
+              });
+              if (existingAlerts.length > 1) {
+                const dupAlertIds = existingAlerts.slice(1).map((a) => a.id);
+                await this.prisma.alertEvent.deleteMany({ where: { id: { in: dupAlertIds } } });
+              }
+            } else {
+              await this.prisma.alertEvent.create({
+                data: {
+                  ruleCode,
+                  category,
+                  severity,
+                  status: 'NEW',
+                  title,
+                  message,
+                  assetId: agent.assetId,
+                  agentId: agent.id,
+                  deviceChangeId: change.id,
+                  component,
+                  previousValue: prev,
+                  newValue: next,
+                  source: 'WINDOWS_AGENT',
+                  detectedAt: now,
+                },
+              });
+            }
           }
         };
 

@@ -1,15 +1,62 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { buildCanonicalSnapshot } from '../agents/agents.service';
 import { AuthUser } from '../auth/guards';
 
 @Injectable()
-export class AlertsService {
+export class AlertsService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
+
+  async onModuleInit() {
+    try {
+      await this.deduplicatePendingConfigChanges();
+    } catch {
+      // ignore startup dedup errors
+    }
+  }
+
+  /**
+   * Dọn các bản ghi thay đổi cấu hình PENDING và cảnh báo mở trùng hệt nhau,
+   * chỉ giữ lại đúng 1 bản ghi mới nhất cho mỗi (assetId, agentId, component, previousValue, newValue).
+   */
+  async deduplicatePendingConfigChanges() {
+    const pending = await this.prisma.deviceChange.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { detectedAt: 'desc' },
+    });
+    const seenChange = new Set<string>();
+    const dupChangeIds: string[] = [];
+    for (const ch of pending) {
+      const key = `${ch.assetId || ''}|${ch.agentId || ''}|${ch.component}|${ch.previousValue || ''}|${ch.newValue || ''}`;
+      if (seenChange.has(key)) dupChangeIds.push(ch.id);
+      else seenChange.add(key);
+    }
+    if (dupChangeIds.length > 0) {
+      await this.prisma.deviceChange.deleteMany({ where: { id: { in: dupChangeIds } } });
+    }
+
+    const openAlerts = await this.prisma.alertEvent.findMany({
+      where: {
+        category: { in: ['CONFIG_CHANGE', 'SOFTWARE'] },
+        status: { in: ['NEW', 'ACKNOWLEDGED', 'IN_PROGRESS'] },
+      },
+      orderBy: { detectedAt: 'desc' },
+    });
+    const seenAlert = new Set<string>();
+    const dupAlertIds: string[] = [];
+    for (const al of openAlerts) {
+      const key = `${al.assetId || ''}|${al.agentId || ''}|${al.component || ''}|${al.previousValue || ''}|${al.newValue || ''}`;
+      if (seenAlert.has(key)) dupAlertIds.push(al.id);
+      else seenAlert.add(key);
+    }
+    if (dupAlertIds.length > 0) {
+      await this.prisma.alertEvent.deleteMany({ where: { id: { in: dupAlertIds } } });
+    }
+  }
 
   async listAlerts(query: { category?: string; severity?: string; status?: string; search?: string }) {
     const where: any = {};
