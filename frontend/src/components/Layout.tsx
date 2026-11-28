@@ -35,6 +35,7 @@ import {
   Sliders,
   Cpu,
   FileClock,
+  FileText,
   Info,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -299,6 +300,7 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
       { to: '/maintenance', label: 'Bảo trì & sửa chữa', icon: Wrench, badge: 0, show: can('assets.read') },
       { to: '/inventory', label: 'Kiểm kê tài sản', icon: ClipboardCheck, badge: 0, show: can('assets.read') },
       { to: '/software', label: 'Phần mềm & License', icon: Package, badge: 0, show: can('software.read') },
+      { to: '/contracts', label: 'Quản lý hợp đồng', icon: FileText, badge: 0, show: can('assets.read') },
       { to: '/alerts', label: 'Cảnh báo & Thay đổi', icon: Bell, badge: badges.unresolvedAlerts, show: can('alerts.read') },
       { to: '/reports', label: 'Báo cáo', icon: BarChart3, badge: 0, show: can('reports.read') },
     ].filter((item) => item.show),
@@ -825,7 +827,9 @@ export const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) =>
                               const targetLink =
                                 n.scope === 'LICENSE'
                                   ? n.link || '/software'
-                                  : `/alerts?tab=alerts&alertId=${encodeURIComponent(nid)}`;
+                                  : n.scope === 'CONTRACT'
+                                    ? n.link || '/contracts'
+                                    : `/alerts?tab=alerts&alertId=${encodeURIComponent(nid)}`;
 
                               return (
                                 <button

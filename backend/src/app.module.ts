@@ -13,6 +13,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { SoftwareModule } from './software/software.module';
 import { ReportsModule } from './reports/reports.module';
 import { CatalogsModule } from './catalogs/catalogs.module';
+import { ContractsModule } from './contracts/contracts.module';
 import { PrismaService } from './prisma/prisma.service';
 
 @Controller('api/v1/health')
@@ -50,6 +51,7 @@ export class HealthController {
     SoftwareModule,
     ReportsModule,
     CatalogsModule,
+    ContractsModule,
   ],
   controllers: [HealthController],
 })

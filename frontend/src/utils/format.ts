@@ -105,6 +105,9 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   ENROLLMENT_TOKEN_REVOKED: 'Thu hồi Enrollment Token',
   AGENT_ENROLLED: 'Đăng ký Windows Agent',
   AGENT_REVOKED: 'Thu hồi Windows Agent',
+  CONTRACT_CREATED: 'Tạo mới hợp đồng',
+  CONTRACT_UPDATED: 'Cập nhật hợp đồng',
+  CONTRACT_DELETED: 'Xóa hợp đồng',
 };
 
 export function formatAuditAction(action?: string | null): string {
@@ -241,4 +244,48 @@ export const LICENSE_DOC_TYPES: Record<string, string> = {
   PO: 'Đơn đặt hàng (PO)',
   HANDOVER: 'Biên bản bàn giao',
   OTHER: 'Chứng từ khác',
+};
+
+export const CONTRACT_TYPE_META: Record<string, { label: string; desc: string; cls: string }> = {
+  PURCHASE: {
+    label: 'Mua sắm thiết bị',
+    desc: 'Hợp đồng mua mới máy tính, thiết bị văn phòng và hạ tầng',
+    cls: 'bg-sky-50 text-sky-700 border-sky-200',
+  },
+  MAINTENANCE: {
+    label: 'Bảo trì / SLA',
+    desc: 'Hợp đồng bảo dưỡng định kỳ, hỗ trợ kỹ thuật và bảo hành mở rộng',
+    cls: 'bg-amber-50 text-amber-800 border-amber-200',
+  },
+  LICENSE: {
+    label: 'Bản quyền phần mềm',
+    desc: 'Hợp đồng cung cấp, gia hạn gói bản quyền và dịch vụ đám mây',
+    cls: 'bg-violet-50 text-violet-700 border-violet-200',
+  },
+  RENTAL: {
+    label: 'Thuê thiết bị / Dịch vụ',
+    desc: 'Hợp đồng thuê máy in, đường truyền, máy chủ hoặc thiết bị ngắn/dài hạn',
+    cls: 'bg-teal-50 text-teal-700 border-teal-200',
+  },
+  OTHER: {
+    label: 'Hợp đồng khác',
+    desc: 'Các hợp đồng cung ứng, dịch vụ liên quan khác',
+    cls: 'bg-slate-100 text-slate-700 border-slate-200',
+  },
+};
+
+export const CONTRACT_STATUS_META: Record<string, { label: string; cls: string }> = {
+  ACTIVE: { label: 'Đang hiệu lực', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  EXPIRING_SOON: { label: 'Sắp hết hạn', cls: 'bg-amber-50 text-amber-800 border-amber-200' },
+  EXPIRED: { label: 'Đã hết hạn', cls: 'bg-red-50 text-red-700 border-red-200' },
+  DRAFT: { label: 'Bản nháp', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+  TERMINATED: { label: 'Đã thanh lý', cls: 'bg-slate-100 text-slate-600 border-slate-200' },
+};
+
+export const CONTRACT_DOC_TYPES: Record<string, string> = {
+  CONTRACT: 'Bản gốc / Scan hợp đồng',
+  APPENDIX: 'Phụ lục hợp đồng',
+  INVOICE: 'Hóa đơn thanh toán',
+  ACCEPTANCE: 'Biên bản nghiệm thu / thanh lý',
+  OTHER: 'Tài liệu khác',
 };

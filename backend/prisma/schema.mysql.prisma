@@ -1022,3 +1022,44 @@ model SoftwareLicenseDocument {
   @@index([licenseId])
 }
 
+model Contract {
+  id               String    @id @default(uuid())
+  contractCode     String    @unique
+  title            String
+  contractType     String    @default("PURCHASE") // PURCHASE, MAINTENANCE, LICENSE, RENTAL, OTHER
+  supplierId       String?
+  supplierName     String?
+  contractValue    Float     @default(0)
+  signedDate       DateTime?
+  startDate        DateTime?
+  endDate          DateTime?
+  remindDaysBefore Int       @default(30)
+  autoRenew        Boolean   @default(false)
+  status           String    @default("ACTIVE") // DRAFT, ACTIVE, EXPIRED, TERMINATED
+  ownerName        String?
+  departmentName   String?
+  notes            String?   @db.Text
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  documents        ContractDocument[]
+}
+
+model ContractDocument {
+  id           String   @id @default(uuid())
+  contractId   String
+  docType      String   @default("CONTRACT") // CONTRACT, APPENDIX, INVOICE, ACCEPTANCE, OTHER
+  originalName String
+  storedName   String
+  mimeType     String
+  sizeBytes    Int      @default(0)
+  notes        String?
+  uploadedBy   String?
+  createdAt    DateTime @default(now())
+
+  contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+

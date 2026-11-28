@@ -9,7 +9,7 @@ export class DashboardService {
 
   async getOverview(user: AuthUser) {
     const scopeWhere = buildAssetScopeWhere(user);
-    const [assets, licenses, pendingApproval, offlineSetting, allAgents, alerts, recentChanges] =
+    const [assets, licenses, contracts, pendingApproval, offlineSetting, allAgents, alerts, recentChanges] =
       await Promise.all([
         this.prisma.asset.findMany({
           where: scopeWhere,
@@ -26,6 +26,10 @@ export class DashboardService {
             allocations: { where: { status: 'ACTIVE' }, select: { seatCount: true } },
           },
           orderBy: { expirationDate: 'asc' },
+        }),
+        this.prisma.contract.findMany({
+          where: { status: { notIn: ['TERMINATED', 'DRAFT'] }, endDate: { not: null } },
+          orderBy: { endDate: 'asc' },
         }),
         this.prisma.discoveredDevice.count({
           where: { approvalStatus: { in: ['PENDING', 'VERIFY_CONFLICT'] } },
@@ -353,6 +357,39 @@ export class DashboardService {
       repairs,
     }));
 
+    const contractAlerts: Array<{
+      id: string;
+      scope: 'CONTRACT';
+      severity: 'CRITICAL' | 'HIGH';
+      title: string;
+      message: string;
+      detectedAt: string;
+      link: string;
+      badgeLabel: string;
+    }> = [];
+
+    for (const c of contracts) {
+      if (!c.endDate) continue;
+      const diffDays = Math.ceil((new Date(c.endDate).getTime() - now.getTime()) / 86_400_000);
+      const remindDays = Math.max(1, c.remindDaysBefore ?? 30);
+      if (diffDays <= remindDays) {
+        const isExpired = diffDays < 0;
+        const isUrgent = isExpired || diffDays <= 7;
+        contractAlerts.push({
+          id: `contract-${c.id}`,
+          scope: 'CONTRACT',
+          severity: isUrgent ? 'CRITICAL' : 'HIGH',
+          title: isExpired
+            ? `Hợp đồng ${c.contractCode} đã hết hạn (${Math.abs(diffDays)} ngày)`
+            : `Nhắc hẹn hợp đồng ${c.contractCode} sắp hết hạn (còn ${diffDays} ngày)`,
+          message: `${c.title}${c.supplierName ? ` • NCC: ${c.supplierName}` : ''}`,
+          detectedAt: (c.updatedAt || c.createdAt).toISOString(),
+          link: `/contracts/${c.id}`,
+          badgeLabel: isUrgent ? 'Ưu tiên' : 'Nhắc hẹn',
+        });
+      }
+    }
+
     return {
       kpis: {
         totalAssets,
@@ -394,7 +431,7 @@ export class DashboardService {
           { name: 'Nghiêm trọng', key: 'CRITICAL', value: sevCounts.CRITICAL },
         ],
       },
-      alertCenter: [...licenseAlerts, ...openAssetAlerts].slice(0, 20),
+      alertCenter: [...contractAlerts, ...licenseAlerts, ...openAssetAlerts].slice(0, 25),
       expiringLicenseList: expiringLicenseList.slice(0, 8),
       recentAlerts: alerts.slice(0, 8),
       recentChanges,

@@ -38,6 +38,9 @@ import { AgentManagementPage } from './pages/admin/AgentManagementPage';
 import { AuditLogsPage } from './pages/admin/AuditLogsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { SoftwareInfoPage } from './pages/SoftwareInfoPage';
+import { ContractsPage } from './pages/ContractsPage';
+import { ContractCreatePage } from './pages/ContractCreatePage';
+import { ContractDetailPage } from './pages/ContractDetailPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, loading } = useAuth();
@@ -73,6 +76,9 @@ export function App() {
           <Route path="/software" element={<ProtectedRoute><SoftwarePage /></ProtectedRoute>} />
           <Route path="/software/licenses/new" element={<ProtectedRoute><SoftwareLicenseCreatePage /></ProtectedRoute>} />
           <Route path="/software/licenses/:id" element={<ProtectedRoute><SoftwareLicenseDetailPage /></ProtectedRoute>} />
+          <Route path="/contracts" element={<ProtectedRoute><ContractsPage /></ProtectedRoute>} />
+          <Route path="/contracts/new" element={<ProtectedRoute><ContractCreatePage /></ProtectedRoute>} />
+          <Route path="/contracts/:id" element={<ProtectedRoute><ContractDetailPage /></ProtectedRoute>} />
           <Route path="/alerts" element={<ProtectedRoute><AlertsPage /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
           <Route path="/about" element={<ProtectedRoute><SoftwareInfoPage /></ProtectedRoute>} />
